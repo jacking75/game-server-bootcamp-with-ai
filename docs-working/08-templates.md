@@ -76,6 +76,8 @@
 
 ## T3. 학습용 CLAUDE.md (C# 버전)
 
+> 이 템플릿은 Claude Code 기준 예시다. Codex CLI 등 다른 코딩 에이전트를 쓴다면 해당 도구의 지침 파일(예: `AGENTS.md`)에 동일한 내용을 작성하면 된다.
+
 ```markdown
 # 프로젝트: <이름> (학습용)
 
@@ -83,9 +85,9 @@
 이 프로젝트는 학습 과제다. 코드의 완성보다 학습자(나)가 모든 코드를 이해하는 것이 우선이다.
 
 ## 환경
-- Windows 11, .NET 9 SDK, Visual Studio 2022 / VS Code
+- Windows 11, .NET 10 SDK, Visual Studio 2026 / VS Code
 - 테스트: xUnit. 벤치마크: BenchmarkDotNet (Release만)
-- Docker 사용 안 함. MySQL 8·Redis(Memurai)는 로컬 Windows 서비스
+- Docker 사용 안 함. CI 사용 안 함(로컬 스크립트로 빌드·테스트). 기본 DB는 SQLite(파일 기반), 선택 시 MySQL 8(Repository 인터페이스 + DI로 구현체 교체). Redis는 redis-windows(https://github.com/redis-windows/redis-windows)를 로컬에서 실행
 
 ## 구조
 - src/<Project>.Net : 네트워크 계층 (세션, 송수신)
@@ -99,7 +101,7 @@
 2. async 메서드는 Async 접미사, async void 금지
 3. 공유 상태는 소유자를 주석으로 명시. 룸 로직에는 lock 금지(Job 큐로)
 4. 소켓 버퍼는 반드시 풀에서 빌리고 반환
-5. 예외는 경계(핸들러 진입점)에서만 잡고 로그
+5. 예외는 경계(핸들러 진입점)에서만 잡고 Serilog로 로그
 
 ## 에이전트 행동 규칙 (학습 목적)
 - 코드를 생성할 때 각 클래스/주요 함수에 "왜 이렇게 설계했는지" 한 줄 주석을 단다
@@ -115,7 +117,7 @@
 
 ```markdown
 ## 환경
-- Windows 11, Visual Studio 2022 (MSVC v143, C++20/23), CMake 3.28+, vcpkg 매니페스트 모드
+- Windows 11, Visual Studio 2026 (MSVC, C++20/23), CMake 3.28+, vcpkg 매니페스트 모드
 - 테스트: GoogleTest. 벤치마크: Google Benchmark (Release만). ASan은 Debug 구성에서 상시
 - 네트워크: Winsock2 + IOCP 직접 구현 (Boost.Asio 사용 금지 — 비교용 별도 프로젝트 제외)
 
@@ -267,10 +269,10 @@
 - 최근 로그: `Get-Content <경로> -Tail 200`
 - 대시보드: <URL>, 알람 목록: <URL>
 
-## 장애 1: <이름> (예: MySQL 응답 없음)
+## 장애 1: <이름> (예: MySQL 응답 없음, MySQL을 선택했을 경우)
 - 감지: 알람 <이름> / 증상 (로그인 실패 급증, 대시보드 패널 X)
 - 진단 (5분 내):
-  1. `Get-Service MySQL80` 상태
+  1. `Get-Service MySQL80` 상태 (MySQL을 선택했을 경우)
   2. API 서버 로그에서 `DbTimeout` 카운트
   3. 대시보드 DB 지연 패널
 - 대응:

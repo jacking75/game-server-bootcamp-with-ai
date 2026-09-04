@@ -4,7 +4,7 @@
 > 대상: C#/C++ 기초 문법을 아는 상태에서 온라인 게임 서버 개발자로 취업·실무 진입을 목표로 하는 학습자  
 > 기간: 6개월(26주), 주 5일, 하루 8시간 = 약 1,040시간  
 > 전제: 학습자는 혼자 학습하며, 챗 AI(개념 학습·질의)와 코딩 에이전트(Claude Code 등, 구현·리뷰)를 항상 옆에 두고 학습한다  
-> 환경: **Windows 기준**. 소켓 서버는 Windows(Winsock/IOCP, .NET on Windows)에서 개발·실행하고, **Docker는 사용하지 않는다**.   MySQL·Redis·Prometheus·Grafana도 Windows에 직접 설치한다   
+> 환경: **Windows 기준**. 소켓 서버는 Windows(Winsock/IOCP, .NET on Windows)에서 개발·실행하고, **Docker는 사용하지 않는다**. DB는 DI로 추상화해 개발 중에는 SQLite를 기본으로 쓰고(설치 불필요, 개발 편의성), 선택적으로 MySQL을 쓴다. Redis(redis-windows)·Prometheus·Grafana도 Windows에 직접 설치한다   
   
 ## 문서 구성
 
@@ -15,7 +15,7 @@
 | `02-phase2-network.md` | Phase 2 (4~7주) 네트워크 프로그래밍 기초 |
 | `03-phase3-realtime-server.md` | Phase 3 (8~11주) 실시간 게임 서버 아키텍처 |
 | `04-phase4-data-api.md` | Phase 4 (12~15주) 데이터·API 서버 |
-| `05-phase5-operations.md` | Phase 5 (16~20주) 운영 품질: 성능·관측·배포·보안 |
+| `05-phase5-operations.md` | Phase 5 (16~20주) 운영 품질: 성능·관측·보안 |
 | `06-phase6-capstone.md` | Phase 6 (21~26주) 캡스톤·취업 준비 |
 | `07-books-guide.md` | 교재 활용 가이드 — `jacking75/programming-books-with-ai` 저장소의 책을 언제·무엇을·어떻게 볼지 |
 | `08-templates.md` | 학습 노트·주간 회고·CLAUDE.md·설계 문서·ADR·리포트·런북 템플릿 |
@@ -31,9 +31,9 @@
 6개월 후 학습자는 다음을 할 수 있어야 한다.
 
 - 선택한 언어로 TCP 기반 실시간 게임 서버를 Windows에서 설계·구현하고, 수백~천 단위 동시 접속 부하에서 안정적으로 동작시킨다
-- 계정·로비·자산을 다루는 데이터 API 서버와 MySQL/Redis 설계를 직접 한다
+- 계정·로비·자산을 다루는 데이터 API 서버와 DB(SQLite/MySQL)·Redis 설계를 직접 한다
 - 부하 테스트·프로파일링·로그·메트릭으로 서버를 측정하고 수치로 개선을 증명한다
-- Windows 서버 환경에 서비스 형태로 배포하고, 장애를 재현·대응한다
+- 서버의 장애를 재현·대응하고, 재시도·서킷 브레이커 같은 복원력 패턴을 적용한다
 - AI를 "대신 짜주는 도구"가 아니라 "설명·리뷰·출제·페어 프로그래밍 파트너"로 쓰는 습관을 갖춘다
 - 만든 서버를 코드·문서·발표로 설명한다 (포트폴리오 + 기술 면접)
 
@@ -43,7 +43,7 @@
 
 | 구분 | 내용 | 비중 |
 |---|---|---|
-| 공통 | 네트워크·OS·DB·아키텍처 개념, 설계·문서화, 테스트, 운영(관측·배포·장애), AI 활용법, 검증 체계 | 약 55% |
+| 공통 | 네트워크·OS·DB·아키텍처 개념, 설계·문서화, 테스트, 운영(관측·장애 대응), AI 활용법, 검증 체계 | 약 55% |
 | 트랙 | 언어 심화, 런타임/메모리 모델, 네트워크 API, 프레임워크·라이브러리, 프로파일링 도구, 트랙별 과제 구현 | 약 45% |
 
 - 학습자는 **1주차 안에 주 트랙을 하나 선택**한다. 기준은 (1) 목표 회사군의 기술 스택, (2) 본인 선호, (3) 기존 숙련도다.
@@ -61,7 +61,7 @@
 | 2. 네트워크 프로그래밍 | 4~7 | 160h | 70h | 90h |
 | 3. 실시간 게임 서버 아키텍처 | 8~11 | 160h | 90h | 70h |
 | 4. 데이터·API 서버 | 12~15 | 160h | 100h | 60h |
-| 5. 운영 품질 | 16~20 | 200h | 140h | 60h |
+| 5. 운영 품질(성능·관측·보안) | 16~20 | 200h | 140h | 60h |
 | 6. 캡스톤·취업 준비 | 21~26 | 240h | 130h | 110h |
 | 합계 | 26주 | 1,040h | 570h | 470h |
 
@@ -72,17 +72,15 @@
 | 구분 | 도구 | 비고 |
 |---|---|---|
 | OS | Windows 11 (10도 가능) | 서버·클라이언트·DB 모두 로컬 Windows에서 실행 |
-| IDE | Visual Studio 2022 Community 이상 (C#: .NET 워크로드, C++: "C++를 사용한 데스크톱 개발" 워크로드), VS Code | C++ 트랙은 vcpkg, CMake 포함 |
-| .NET | .NET 9 SDK 이상 (교재 예제 일부는 .NET 10 필요) | `dotnet --list-sdks`로 확인 |
+| IDE | Visual Studio 2026 Community 이상 (C#: .NET 워크로드, C++: "C++를 사용한 데스크톱 개발" 워크로드), VS Code | C++ 트랙은 vcpkg, CMake 포함 |
+| .NET | .NET 10 SDK | `dotnet --list-sdks`로 확인 |
 | 터미널 | Windows Terminal + PowerShell 7 | 스크립트는 PowerShell 기준 |
-| Git | Git for Windows + GitHub 계정 | CI는 GitHub Actions `windows-latest` 러너 |
-| MySQL | MySQL 8.0 Windows Installer + MySQL Workbench | Windows 서비스로 실행 |
-| Redis | Memurai Developer(Redis 호환, Windows 네이티브) 또는 WSL2에 redis-server 설치 중 택1 | Redis는 공식 Windows 빌드가 없다. Docker는 쓰지 않으므로 이 둘 중 하나를 쓴다 |
+| Git | Git for Windows + GitHub 계정 | 이 과정은 CI를 사용하지 않는다. 로컬에서 직접 빌드·테스트한다 |
+| DB | SQLite(기본, NuGet 패키지로 사용, 별도 설치 불필요) + 선택적으로 MySQL 8.0(Windows Installer + Workbench) | DI로 DB 접근을 추상화해 SQLite↔MySQL을 교체 가능하게 만든다. 개발 편의성을 위해 SQLite를 기본으로 쓴다 |
+| Redis | redis-windows(https://github.com/redis-windows/redis-windows) | Windows를 지원하는 Redis 네이티브 빌드. Docker는 쓰지 않으므로 이것을 쓴다 |
 | 관측 | Prometheus, Grafana, windows_exporter Windows 바이너리 | 교재(프로메테우스 책)가 Windows 설치 기준 |
-| 로그 | Serilog/ZLogger(C#), spdlog(C++), 선택적으로 fluent-package(Windows) | |
-| 패킷 관찰 | Wireshark, `netstat`/`Get-NetTCPConnection` | |
-| 배포 | Windows 서비스(sc.exe / .NET Worker Service / Win32 서비스), 배포 대상은 두 번째 PC·가상 머신(Hyper-V/VirtualBox)·클라우드 Windows VM 중 택1 | Phase 5에서 확정 |
-| AI | Claude Code(코딩 에이전트) + 챗 AI(Claude/ChatGPT 등) | 교재 저장소의 OpenCode 가이드로 에이전트 개념을 보조 학습 |
+| 로그 | Serilog(C#), spdlog(C++), 선택적으로 fluent-package(Windows) | |
+| AI | 코딩 에이전트(Claude Code 등) + 챗 AI(Claude/ChatGPT 등) | 특정 코딩 에이전트를 필수로 하지 않는다. Claude Code를 기본 예시로 쓰되 Codex-Cli 등 다른 에이전트도 가능하다. 교재 저장소의 OpenCode 가이드로 에이전트 개념을 보조 학습 |
 
 ---
 
@@ -139,10 +137,10 @@ AI 사용을 금지하지 않고 적극 사용하되, **AI가 학습을 대체�
 | Phase | 주차 | 공통 주제 | C# 트랙 | C++ 트랙 | 최종 과제 |
 |---|---|---|---|---|---|
 | 1 | 1~3 | Git, 테스트, 디버깅, Windows 개발 환경, OS·동시성 개념, 벤치마크 방법론 | async/await 내부, GC, Span/ArrayPool, Channel, BenchmarkDotNet | 스마트 포인터·이동·RAII, std::thread/atomic, Win32 동기화(SRWLock/CV), vcpkg/CMake, ASan | 스레드 세이프 로그 큐 + 오브젝트 풀 + 벤치마크 리포트 |
-| 2 | 4~7 | TCP/IP, 패킷 프레이밍, 직렬화, Wireshark, 세션 관리 | Socket/SocketAsyncEventArgs, Pipelines, MemoryPack, (선택) SuperSocketLite | Winsock, select → Overlapped → IOCP, 세션·버퍼 관리 | 다중 접속 채팅 서버 + 패킷 라이브러리 + 테스트 클라이언트 |
-| 3 | 8~11 | 스레드 모델, 룸 액터, 게임 루프, 서버 권위, 설계 문서·ADR | Channel 기반 룸 액터, PeriodicTimer, ZLogger, 테스트 분리 | 룸 Job 큐 + 스레드 배정, 타이머, 메모리 풀, spdlog | 멀티 룸 실시간 대전 게임 서버(오목) |
-| 4 | 12~15 | HTTP API 설계, 인증, MySQL, Redis, 트랜잭션, 동시성 방어 | ASP.NET Core, SqlKata/Dapper, CloudStructures/StackExchange.Redis | (a) cpp-httplib/Drogon + MySQL Connector + redis-plus-plus, (b) C# 혼합 | 계정/로비/우편/상점 API 서버 |
-| 5 | 16~20 | 부하 테스트, Prometheus/Grafana, Windows 서비스 배포, 장애 주입, 보안, CI | dotnet-counters/trace, PerfView, GC 튜닝 | VS Profiler/ETW/WPA, ASan, TLS·메모리 모델 활용 최적화 | 더미 클라이언트 툴 + 성능 개선 리포트 + 배포·런북 |
+| 2 | 4~7 | TCP/IP, 패킷 프레이밍, 직렬화, 세션 관리 | Socket/SocketAsyncEventArgs, Pipelines, MemoryPack, (선택) SuperSocketLite | Winsock, select → Overlapped → IOCP, 세션·버퍼 관리 | 다중 접속 채팅 서버 + 패킷 라이브러리 + 테스트 클라이언트 |
+| 3 | 8~11 | 스레드 모델, 룸 액터, 게임 루프, 서버 권위, 설계 문서·ADR | Channel 기반 룸 액터, PeriodicTimer, Serilog, 테스트 분리 | 룸 Job 큐 + 스레드 배정, 타이머, 메모리 풀, spdlog | 멀티 룸 실시간 대전 게임 서버(오목) |
+| 4 | 12~15 | HTTP API 설계, 인증, DB(SQLite 기본/MySQL 선택)·Redis, 트랜잭션, 동시성 방어 | ASP.NET Core, Repository+DI(SQLite 기본, 선택 시 SqlKata/Dapper+MySQL), CloudStructures/StackExchange.Redis | (a) cpp-httplib/Drogon + SQLite(기본)/MySQL Connector(선택) + redis-plus-plus, (b) C# 혼합 | 계정/로비/우편/상점 API 서버 |
+| 5 | 16~20 | 부하 테스트, Prometheus/Grafana, 복원력 패턴(재시도·서킷 브레이커), 장애 주입, 보안 | dotnet-counters/trace, PerfView, GC 튜닝 | VS Profiler/ETW/WPA, ASan, TLS·메모리 모델 활용 최적화 | 더미 클라이언트 툴 + 성능 개선 리포트 + 장애 대응 런북 |
 | 6 | 21~26 | 다중 서버 구성, 매칭 서버, 스케일 아웃, 문서화, 면접 준비 | 트랙 언어로 통합 | 트랙 언어로 통합 | 통합 캡스톤 + 포트폴리오 + 모의 면접 |
 
 ---
@@ -205,7 +203,7 @@ AI 사용을 금지하지 않고 적극 사용하되, **AI가 학습을 대체�
 
 ### 5.5 최종 판정 (26주 말)
 - 캡스톤 데모 + 30분 발표 + 60분 모의 면접
-- 포트폴리오 저장소 5개 이상(README·테스트·CI 포함)
+- 포트폴리오 저장소 5개 이상(README·테스트 포함)
 - 학습 노트 100일 이상, 주간 회고 24개 이상
 
 ---
@@ -215,4 +213,4 @@ AI 사용을 금지하지 않고 적극 사용하되, **AI가 학습을 대체�
 - **하루 8시간을 못 채우는 날이 생기면?** 그 주 금요일 점검에서 "미이행 항목"을 회고에 적고 다음 주 월요일 오전에 보충한다. 2주 연속 20% 이상 미달이면 해당 Phase를 1주 연장하고 Phase 6 범위를 줄인다.
 - **교재 예제가 빌드되지 않는다.** 정상이다. 교재 자체가 "AI 도움을 받아 고쳐 쓰라"고 안내한다. 고치는 과정이 과제의 일부이며, 고친 diff와 원인을 학습 노트에 남긴다.
 - **C++ 트랙인데 Phase 4가 부담된다.** 혼합 경로(API 서버만 C#)를 택한다. 이 경우 Phase 4 첫 주에 "ASP.NET Core Web API를 위한 필수 C# 가이드"를 통독한다.
-- **Docker 없이 MySQL/Redis를 어떻게 여러 벌 띄우나?** 이 과정에서는 로컬 1벌만 쓴다. 통합 테스트는 테스트 전용 스키마/DB 번호(Redis는 DB index 또는 키 prefix)로 분리한다. Phase 5 배포 대상 머신에는 별도로 1벌 설치한다.
+- **Docker 없이 DB/Redis를 어떻게 쓰나?** 개발 중에는 SQLite(파일 기반)를 기본으로 쓰므로 별도 설치가 필요 없다. MySQL을 선택했다면 로컬 1벌만 설치하고, 통합 테스트는 테스트 전용 스키마로 분리한다. Redis(redis-windows)도 로컬 1벌만 쓰고 DB index 또는 키 prefix로 테스트를 분리한다.
