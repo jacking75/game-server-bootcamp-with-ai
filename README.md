@@ -1,6 +1,6 @@
 # Entry-Level Online Game Server Developer Curriculum
 
-> 🇰🇷 Korean version: [README_kr.md](README_kr.md)
+> 한국어 버전: [README_kr.md](README_kr.md)
 >
 > Version 0.4 (2026-09-05 review integrated)
 > Audience: learners who know basic C# or C++ and want to enter online-game server development
