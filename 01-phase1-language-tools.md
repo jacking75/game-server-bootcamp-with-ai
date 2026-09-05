@@ -119,7 +119,7 @@ Weekly time budget (40h): 10h concept study, 8h exercises, 14h assignment implem
 
 ---
 
-## 2. Weekly Detailed Plan (by Day)
+## 2. Weekly Detailed Plan (Day by Day)
 
 Each day is based on 8 hours. On days when time is short, cut 🟡 items first. 🔴 items must be finished that same day, without exception.
 
@@ -509,11 +509,11 @@ By the end of this week: you'll have trustworthy benchmark results and a report,
 
 ---
 
-## 3. Exercise Catalog
+## 3. Lab Catalog
 
 Each exercise follows the format **Goal / Prerequisites / Steps / Expected Result / Pass Criterion / Common Mistake / What to Note**. Save results under `phase1/labs/<exercise-number>/`.
 
-### 3.1 Common Exercises (L-C)
+### 3.1 Common Labs (L-C)
 
 #### L-C-01 Building the Repository Skeleton (40 min) 🔴
 
@@ -694,7 +694,7 @@ Each exercise follows the format **Goal / Prerequisites / Steps / Expected Resul
 - **Steps**: measure the same loop (string parsing or integer arithmetic) in Debug and Release separately, and compute the multiplier
 - **Pass criterion**: a table with both configurations' numbers and the multiplier, plus a paragraph on "why you shouldn't put Debug numbers in a report"
 
-### 3.2 C# Track Exercises (L-CS)
+### 3.2 C# Track Labs (L-CS)
 
 #### L-CS-01 Observing GC Generations (45 min)
 
@@ -735,7 +735,7 @@ Each exercise follows the format **Goal / Prerequisites / Steps / Expected Resul
 
 #### L-CS-06 A Channel-Based Queue (90 min) 🔴
 
-- **Steps**: build the queue with `Channel.CreateBounded<T>(new BoundedChannelOptions(cap){ FullMode = BoundedChannelFullMode.DropWrite })`, a consumption loop with `ReadAllAsync`, and shutdown via `Writer.Complete()`
+- **Steps**: use `FullMode=Wait`; implement Drop with `TryWrite` and count `false`, and Block with `WriteAsync`. Consume via `ReadAllAsync` and shut down with `Writer.Complete()`
 - **Pass criterion**: passes the same scenario as L-CS-04, plus a lines-of-code comparison (usually less than half)
 
 #### L-CS-07 Setting Up BenchmarkDotNet (60 min) 🔴
@@ -773,7 +773,7 @@ Each exercise follows the format **Goal / Prerequisites / Steps / Expected Resul
 - **Steps**: propagate a token through 3 levels of nested async calls, handle `OperationCanceledException` on cancellation, and compare against a version that omits the token
 - **Pass criterion**: cancellation propagates within 1 second, and you confirm the version that omits the token keeps running
 
-### 3.3 C++ Track Exercises (L-CPP)
+### 3.3 C++ Track Labs (L-CPP)
 
 #### L-CPP-01 Tracing Smart Pointer Lifetimes (45 min)
 
@@ -933,7 +933,7 @@ Each item is structured as **What / Why / How (order) / Verify**. "Verify" is th
 
 ---
 
-## 5. Textbook Usage Guide (Phase 1)
+## 5. Textbook Guide (Phase 1)
 
 The textbook source material lives in the `programming-books-with-ai` repository. Read only the assigned chapters, at the assigned time. Follow the reading approach in Overview §2.3 and `07-books-guide.md` §2.
 
@@ -962,14 +962,14 @@ The textbook source material lives in the `programming-books-with-ai` repository
 | The Complete Guide to the C++23 Memory Model | Part 1 (foundational theory), part 2 (memory order in depth) | Right before Day 14 | Read right before L-CPP-08 (lock-free SPSC). Part 3 is Phase 5 |
 | Safe and Easy C++ Programming, Starting with Modern C++ | Only the weak parts of chapters 1-17 | Week 1 (if needed) | Only for learners shaky on syntax. Chapter 18 onward (Siv3D) is unrelated |
 
-### 5.4 Cross-Track Reading Assignment (for Track A parallel learners, under 4h/week)
+### 5.4 Secondary-Track Reading (Track A parallel learners, under 4h/week)
 
 - C# main track: "Safe and Elegant Programming with Modern C++" ch.4-5 → **a "C# GC vs. C++ RAII" comparison table** (4 rows: when lifetime is decided, where the cost falls, leak types, debugging tools)
 - C++ main track: "Mastering C# Async/Await" ch.1 → **a "C++ threads vs. C# Task" comparison table** (4 rows: who schedules, blocking cost, how to cancel, exception propagation)
 
 ---
 
-## 6. AI Collaboration Guide (Phase 1-specific)
+## 6. AI Collaboration Guide (Phase 1)
 
 ### 6.1 Prompts
 
@@ -1099,7 +1099,10 @@ phase1/LogQueue/
    ```csharp
    public enum OverflowPolicy { Drop, Block }
 
-   public sealed record LogEntry(long Seq, int ProducerId, DateTime TimestampUtc, string Message);
+   public readonly record struct LogEntry(long Seq, int ProducerId, DateTime TimestampUtc, string Message);
+
+   public readonly record struct LogQueueStats(long Enqueued, long Dropped, long Written, int CurrentCount);
+   public interface ILogSink { void Write(in LogEntry entry); void Flush(); }
 
    public sealed class LogQueueOptions
    {
@@ -1149,6 +1152,9 @@ phase1/LogQueue/
    - `StopAsync()/Stop()` proceeds in order: ① block new input ② write all remaining entries to the file ③ flush/close the file ④ join the consumer thread
    - After `Stop()`, `Enqueue` must always fail (returning false without an exception is recommended)
    - File line format: `{seq}\t{producerId}\t{ISO8601 UTC}\t{message}`
+   - Escape `\t`, `\r`, and `\n` in messages; write UTF-8 with LF line endings
+   - `StopAsync()/Stop()` and disposal are idempotent. If Stop begins while a producer is blocked, wake it and return `false`
+   - Inject `ILogSink`/an equivalent C++ callback to reproduce write failures; sink exceptions must update error stats without killing the consumer loop
 3. **Policies**
    - `Drop`: when the queue is full, discard immediately and increment `Dropped`; `Enqueue` returns false
    - `Block`: the producer waits until space frees up (a max-wait-time option is optional)
@@ -1188,7 +1194,8 @@ phase1/LogQueue/
 2. Parameters: producer counts 1 / 4 / 16, 100-byte messages, 10 repetitions per condition (3 warmup runs)
 3. Metrics: throughput (msg/s), bytes allocated per entry (C# `MemoryDiagnoser`), `Enqueue` latency p50/p99
 4. Also measure **the queue's own throughput without file I/O** separately (a mode where the consumer just discards items) — to separate whether the bottleneck is the queue or the disk
-5. Save the results as a table, and keep the raw output in `bench/results/` as well
+5. Compute p50/p99 from sorted per-operation samples collected with `Stopwatch.GetTimestamp()`/`steady_clock`; BenchmarkDotNet/Google Benchmark summaries alone are insufficient
+6. Require `bench/run.ps1` to build/run Release and save raw results
 
 **REPORT-1-1.md Template**
 
@@ -1223,7 +1230,7 @@ what it said incorrectly and how you verified it
 | Item | Points | Criterion |
 |---|---|---|
 | Correctness | 30 | all 15 tests pass, all 3 invariants hold |
-| Concurrency | 25 | 4+ on the rubric-item-2 AI review, C++ passes ASan, no deadlock in the shutdown path |
+| Concurrency | 25 | 4+ on the rubric-item-2 AI review, zero loss/duplicates over 10 repetitions of 10 million round trips, no deadlock in the shutdown path |
 | Measurement | 25 | Release, warmup, repetitions, variance reported; the queue-alone measurement is separated out |
 | Report | 20 | numerically grounded conclusion, 1+ "thing AI got wrong" |
 
@@ -1264,15 +1271,16 @@ phase1/ObjectPool/
    template <std::size_t BufferSize = 4096>
    class BufferPool {
    public:
+       struct PoolDeleter;
+       using Handle = std::unique_ptr<std::byte[], PoolDeleter>;
        explicit BufferPool(std::size_t max_retained = 1024);
-       std::unique_ptr<std::byte[]> Rent();
-       void Return(std::unique_ptr<std::byte[]> buf);
+       Handle Rent();                       // returns to the same pool when the handle is destroyed
        PoolStats Stats() const;
    };
    ```
 2. **Thread safety**: start lock-based. If you have time to spare, do a 2-tier design of a per-thread local cache + a global pool (🟡)
 3. **Guarding against misuse**
-   - Detect the same object being `Return`ed twice → assert or throw in a Debug build
+   - C# detects the same object being `Return`ed twice in Debug. C++ exposes only the move-only `Handle`, making an explicit double return impossible by type
    - Returns beyond the pool's size are discarded, incrementing `Discarded`
    - On destruction, warn-log the count of unreturned objects (C++: destructor, C#: `Dispose`)
 4. **Stats**: rented / returned / created / discarded / currently retained counts
@@ -1284,7 +1292,7 @@ phase1/ObjectPool/
 | 1 | Rent_EmptyPool_CreatesNewBuffer | Created == 1 |
 | 2 | ReturnThenRent_Reused | no increase in Created |
 | 3 | ExceedsMaxRetained_Discarded | Discarded > 0, CurrentRetained ≤ maxRetained |
-| 4 | DoubleReturn_Detected | throws/asserts in Debug |
+| 4 | DoubleReturn_Detected | C# throws/asserts in Debug; C++ copy/explicit-return misuse does not compile |
 | 5 | MultiThreaded_RentReturn_Consistency | stats are consistent after 8 threads × 10,000 iterations |
 | 6 | ReturnedBuffer_ContentResetPolicy | follows the documented policy (whether it's cleared is fixed) |
 | 7 | OnDestruction_WarnsUnreturned | 1 warning log |
@@ -1293,7 +1301,7 @@ phase1/ObjectPool/
 **Measurement Requirements**
 
 - **C#**: a **3-way comparison** of `new byte[4096]` every time vs. your own pool vs. `ArrayPool<byte>.Shared`, using `MemoryDiagnoser`. Additionally, capture Gen0 collection-count observations via `dotnet-counters monitor --counters System.Runtime`
-- **C++**: `new/delete` vs. pool comparison (Google Benchmark), confirm 0 leaks under an ASan build
+- **C++**: compare `new/delete` vs. pool with Google Benchmark. Use ASan for UAF/out-of-bounds; prove leak freedom with the CRT debug heap/VS memory snapshot and `Rented == Returned`, `Created == destroyed+retained` counters
 - The table should include throughput, allocation per entry, and GC count (or allocation-call count) together
 
 **Required Content of REPORT-1-2.md**: a 3-way (or 2-way) comparison table / at least 1 condition where pooling is not a net gain (e.g., when buffer lifetime is very short and size is small) / 2 sentences on how you'll use this pool in Phase 2
@@ -1326,7 +1334,7 @@ phase1/ObjectPool/
 
 ---
 
-## 8. Learning Completion Assessment (Friday, Day 15)
+## 8. Learning Completion Assessment (Day 15, Friday)
 
 ### 8.1 Checklist
 
@@ -1439,7 +1447,7 @@ Have the agent generate a version of your own 1-1/1-2 code with **5 hidden defec
 
 ---
 
-## 10. Preparing to Move on to Phase 2
+## 10. Preparing for Phase 2
 
 - [ ] Clone the textbook "Game Server Development, Starting with Understanding Networks" locally (to read through on Phase 2 Day 4)
 - [ ] Split Assignment 1-2's buffer pool out as a **standalone library project**, and confirm it can be referenced from another solution
@@ -1447,3 +1455,27 @@ Have the agent generate a version of your own 1-1/1-2 code with **5 hidden defec
 - [ ] Confirm the port range Phase 2 will use (e.g., 9000-9100) isn't blocked by the firewall. Add an inbound rule if needed
 - [ ] Check your current dynamic-port settings to guard against port exhaustion during local loopback testing: `netsh int ipv4 show dynamicport tcp`
 - [ ] Write up your Phase 1 retrospective in your retrospective notes: the point you got stuck on longest, 1 case where you misused AI, and 1 habit to carry into the next Phase
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Realistic schedule and required labs
+
+- Budget each 40h week as concepts 12h, labs/assignments 14h, no-AI reimplementation 5h, review/evaluation 4h, buffer 5h. Nominal assignment hours include reading, reimplementation, and review; implementation slots are 1-C 6h, 1-1 14h, and 1-2 10h
+- Day 6 morning adds 2h on worker exceptions, sink failure, disk-full policy, and fake-sink tests. Day 7 adds 30 minutes for `appsettings.json`/`IOptions<T>` or JSON/TOML config loading
+- Day 12 compares Serilog `Sinks.Async(blockWhenFull)` and spdlog `block/overrun_oldest` against the custom queue, and practices an `ILogSink` test double, hang dump, and Release+PDB debugging
+- Day 14 C++ requires `L-CPP-11` and `L-CPP-12` (90 min). C# completes two of `L-CS-10/11/12`. `L-CS-08` requires only five traps reproducible in a console app
+- Reserve a half-day buffer every week. Move Day 9 book read-through to evening/weekend reference mode and Day 10 long-running tests to Day 12
+
+### 11.2 Tooling, memory, and testing
+
+- MSVC ASan detects UAF/out-of-bounds but provides neither LeakSanitizer nor data-race detection. Judge leaks with `_CrtSetDbgFlag`, VS memory snapshots, and rent/return plus create/destroy counters
+- Cover C# false sharing with explicit layout/padding, AoS vs SoA, `Volatile.Read/Write`, `Interlocked`, and .NET 9+ `System.Threading.Lock`. Connect C++ `InitOnce`, events, `WaitForMultipleObjects`, and `WaitOnAddress`/`atomic::wait` to shutdown and Block waits
+- Apply monotonic clocks, temp-directory fixtures, per-test timeouts, slow-test categories, and injectable clocks. Practice `git bisect`, `reflog`, `revert`, tags, a pre-commit build/test hook, LF `.gitattributes`, and include `global.json` in 1-C
+- Add a sink-exception survival/error-stat test. Treat 300k msg/s for C# lock and 5M msg/s for C++ SPSC only as environment-dependent reference values
+
+### 11.3 Evaluation and AI checks
+
+- Add questions on volatile vs atomicity, false sharing, monotonic clocks, test doubles, hang dumps, and ASan limitations. Challenge claims that lock-free is always faster or ASan detects leaks/races with official contracts and measurements
+- `REPORT-1-2.md` must state how an IOCP receive buffer is owned until OVERLAPPED completion, including size, slices, worker count, and rental frequency

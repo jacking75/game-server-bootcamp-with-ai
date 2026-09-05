@@ -10,7 +10,7 @@
 
 ### 1.1 어떤 책들인가
 - 저자가 "어떤 책을 만들지, 어떤 내용이 들어가야 할지" AI에게 요청하고, AI가 쓴 글을 편집해 만든 책 모음이다. 저장소 README에 **"예제 코드에 오류가 있을 수 있으니 AI의 도움을 받기 바랍니다"**라고 명시되어 있다
-- 마크다운으로 되어 있어 **그대로 AI 컨텍스트에 넣을 수 있다.** 이것이 종이책과 가장 다른 점이고, 이 과정이 이 저장소를 교재로 삼는 이유다
+- 마크다운이라 AI와 함께 읽기 쉽다. 다만 1만 줄 이상 책은 통째로 넣지 말고 **지정 장 파일 단위로만** 컨텍스트에 넣는다
 - 책마다 완성도·분량·기준 버전(.NET 8/9/10, C++20/23/26)이 다르다. 각 책 카드(§4)에 적어 두었다
 - 예제 코드 폴더가 있는 책은 일부(TCP/IP 소켓, C# Socket, SuperSocketLite, 네트워크 라이브러리 분석, Async 2권, 2D MMORPG, ECS, ASP.NET WebAPI 게임서버, Boost.Asio)다. 나머지는 본문 코드만 있다
 
@@ -20,7 +20,7 @@
 3. **책의 설명 ≠ 정답.** 공식 문서(learn.microsoft.com, cppreference, MySQL/Redis 문서, RFC)와 대조한다. 다르면 공식 문서를 따르고 차이를 노트에 적는다. 학습 노트의 "AI가 틀린 것" 칸에는 책의 오류도 포함한다
 4. **책의 코드를 과제에 그대로 붙이지 않는다.** 책은 대부분 "수집형 RPG", "채팅", "FPS 매칭" 예제이고 과제는 "오목 로비/게임"이다. 도메인을 바꿔 다시 쓰는 과정이 학습이다
 5. **PR을 보낼 수 있다.** 오류를 고쳤으면 저장소에 PR을 보내는 것을 권장한다. 포트폴리오에도 남는다
-6. **버전 차이는 당연하다.** 이 저장소의 책 대부분은 VS 2022·.NET 9(일부는 .NET 8·10) 시점에 쓰였다. 이 과정은 VS 2026·.NET 10을 쓰므로, 책 프로젝트를 열 때 VS 2026으로 마이그레이션하고 `TargetFramework`를 `net10.0`으로 올려 빌드하는 것을 기본으로 한다. 이 과정에서 DB는 SQLite를 기본, MySQL을 선택(DI로 전환 가능)으로 쓰므로, 책이 MySQL을 전제한 코드는 SQL·설계 개념만 취하고 연결 코드는 SQLite로 옮겨 실습하는 것을 기본으로 한다(MySQL을 선택했을 때는 책 코드를 그대로 활용). Redis 설치는 책이 Docker/WSL2/Memurai를 안내해도 이 과정에서는 redis-windows(https://github.com/redis-windows/redis-windows)를 쓴다
+6. **버전 차이는 당연하다.** 이 저장소의 책 대부분은 VS 2022·.NET 9(일부는 .NET 8·10) 시점에 쓰였다. 이 과정은 VS 2026·.NET 10을 쓰므로, 책 프로젝트를 열 때 VS 2026으로 마이그레이션하고 `TargetFramework`를 `net10.0`으로 올려 빌드하는 것을 기본으로 한다. 이 과정에서 DB는 SQLite를 기본, MySQL을 선택(DI로 전환 가능)으로 쓰므로, 책이 MySQL을 전제한 코드는 SQL·설계 개념만 취하고 연결 코드는 SQLite로 옮겨 실습하는 것을 기본으로 한다(MySQL을 선택했을 때는 책 코드를 그대로 활용). Redis 설치는 책이 Docker/WSL2/Memurai를 안내해도 이 과정에서는 redis-windows (https://github.com/redis-windows/redis-windows)를 쓴다
 
 ### 1.3 세 가지 읽기 모드
 | 모드 | 언제 | 방법 | 시간 |
@@ -99,7 +99,7 @@
 | 학습을 위한 C# 네트워크 라이브러리 분석 | | | ○ | | | | C# |
 | C# Async/Await 완전 정복 | ◎ | | ○ | | ○ | | C# |
 | C# async/await 라이브러리 만들기 | ○ | ○ | ◎ | | ○ | △ | C# |
-| 게임 개발자를 위한 C# 디자인 패턴 | ○ | | ◎ | | △ | △ | 공통(개념) |
+| 게임 개발자를 위한 C# 디자인 패턴 | ○ | | ◎ | | ○ | △ | 공통(개념) |
 | ASP.NET Core Web API를 위한 필수 C# 가이드 | ○ | | | ◎(혼합) | | | C#/혼합 |
 | ASP.NET Core Web API를 이용한 API 게임 서버 실습 | | | | ◎ | ○ | | C#/혼합 |
 | ASP.NET Core Web API로 만드는 게임 서버 | | | | ○ | ○ | | C#/혼합 |
@@ -189,7 +189,7 @@
 - 언제: Phase 1 주 교재(1~4·6·7장), Phase 3(10장), Phase 5(5장·부록 B)
 - 무엇: 상태 머신, SynchronizationContext, ConfigureAwait, Awaitable 패턴, 서버에서의 async, 함정 12가지, 비동기 동기화 객체, AsyncLocal, .NET 10 신기능, 실전 패턴, 디버깅 치트시트. 약 3,300줄로 압축적
 - 어떻게: 각 장 끝 체크리스트를 AI 면접관에게 주고 구두 시험. `samples/AsyncAwaitBook.sln`(.NET 10, C# 14)을 빌드. 6장 함정 12가지는 **각각 재현·수정한 프로젝트**를 만든다(Phase 1 과제 항목)
-- 주의: .NET 10 기준. SDK가 없으면 TargetFramework를 net9.0으로 낮추고, .NET 10 전용 API는 표시해 둔다. 대상이 "C# 1년 이상"이므로 문법이 불안하면 필수 C# 가이드 먼저
+- 주의: 과정 표준은 .NET 10이다. SDK를 설치한 뒤 `global.json`으로 고정한다. 대상이 "C# 1년 이상"이므로 문법이 불안하면 필수 C# 가이드 먼저
 
 **C# async/await 라이브러리 만들기 — 직접 구현하며 배우는 .NET 10 비동기 내부** — `CSharp-Async_Await_라이브러리_만들기/README.md`
 - 언제: Phase 1(1~6장), Phase 2(7장), Phase 3 주 교재(16~18장), Phase 5(14·19·20장), Phase 6(13·15장)
@@ -230,9 +230,9 @@
 - 주의: 12장 Redis 실습의 Docker/WSL2/Memurai 절은 건너뛰고, 이 과정은 redis-windows(Windows 네이티브 바이너리)를 쓴다. 15·19·21장은 선택
 
 **ASP.NET Core Web API로 만드는 게임 서버** — `ASP_NET_WebAPI로_만드는_게임서버/01~17.md`, 부록
-- 언제: Phase 4 보충(5~8·13·16장), Phase 5(14·16·17장)
+- 언제: Phase 4 보충(5~8·13·16장), Phase 5(14·16장)
 - 무엇: Web API 기초, .http 테스트, MySQL/Redis, 인증, 캐릭터·인벤토리·가챠·전투, 비동기·최적화·보안·배포. 부록에 콘텐츠/수집/소셜/상점 API 모듈화. 약 48,000줄로 매우 큼
-- 어떻게: 실습 책과 주제가 겹치므로 보충용. `codes/GameAPIServer_Template_01`(net9.0)의 Controllers/Repository/Services 구조를 보고 프로젝트 구조 ADR. 17장(Docker·배포)은 이 과정 범위 밖(CI·배포 미사용 정책)이므로 건너뛴다
+- 어떻게: 실습 책과 주제가 겹치므로 보충용. `codes/GameAPIServer_Template_01`의 Controllers/Repository/Services 구조를 .NET 10으로 올려 보고 프로젝트 구조 ADR을 쓴다. 17장(Docker·배포)은 건너뛴다
 - 주의: 3장(환경 구축)이 22줄로 거의 없음. 부록이 본문보다 길다. README가 "부족한 부분은 AI로 채우라"고 안내
 
 **FPS 게임 매칭 시스템 만들기** — `매칭-FPS_게임_매칭_시스템_만들기/`
@@ -258,7 +258,7 @@
 **게임 서버 개발자를 위한 최신 Win32 API 프로그래밍** — `게임_서버_개발자를_위한_최신_Win32_API 프로그래밍/`(폴더명에 공백)
 - 언제: Phase 1 주 교재(1·2·4~6장), Phase 3(2·4장 재독), Phase 5(7장·부록 C)
 - 무엇: Win32 기초, 메모리 관리(VirtualAlloc·Heap·메모리 풀), 파일 I/O(Overlapped), 프로세스/스레드, 동기화 심화, 인터락/무잠금, 성능 카운터/ETW, 시스템 정보, 보안/권한, 서비스 프로그래밍(이 과정에서는 다루지 않음), COM/WinRT. VS 2022·C++20
-- 어떻게: 2장 메모리 풀은 1-2 과제 참고. 7장은 성능 카운터(PDH)를 자기 메트릭에 노출하는 데 활용(Phase 5). 10장(서비스 프로그래밍)은 이 과정이 배포를 다루지 않으므로 읽지 않아도 된다. 부록 D의 VS 2022 팁도 초반에 읽어 두면 좋다
+- 어떻게: 2장 메모리 풀은 1-2 과제 참고. 7장은 성능 카운터(PDH)를 자기 메트릭에 노출하는 데 활용한다. 10장 서비스 프로그래밍은 읽지 않는다. 부록 D의 VS 팁은 현재 IDE와 대조한다
 - 주의: Winsock은 다루지 않는다(소켓은 TCP/IP 책 담당). 코드 폴더 없음
 
 **C++23 메모리 모델(Memory Order) 완벽 가이드** — `Cpp-MemoryModel/01~05.md`
@@ -313,14 +313,15 @@
 
 **1주일만에 배우는 Redis 프로그래밍** — `DB-1주일만에_배우는_Redis_프로그래밍/01~07.md`
 - 언제: Phase 4 주 교재(1·2장 공통, 3~5·7장 C#), Phase 6(6장 Pub/Sub)
-- 무엇: 설치(WSL2/Memurai 절 포함), 내부 구조·데이터 타입, CloudStructures, 세션·중복 로그인, 프로필·인벤토리 캐시, ZSet 랭킹, Pub/Sub, 이벤트·Pipeline·모니터링. .NET 9·Redis 6+
-- 어떻게: 1장의 Docker/WSL2/Memurai 절은 모두 건너뛰고 redis-windows(https://github.com/redis-windows/redis-windows) 설치로 대체한다. 2장 자료구조 표를 "이 데이터는 DB(SQLite/MySQL)인가 Redis인가" 판정표로 확장. 6장 Pub/Sub은 캡스톤 서버 간 통신 후보(유실 특성을 ADR에)
+- 무엇: 설치, 내부 구조·데이터 타입, CloudStructures, 세션·중복 로그인, 캐시, ZSet, Pub/Sub, Pipeline·모니터링. 캡스톤 `GETDEL`은 Redis 6.2+가 필요하며 낮은 버전은 Lua로 대체한다
+- 어떻게: 1장의 Docker/WSL2/Memurai 절은 모두 건너뛰고 redis-windows (https://github.com/redis-windows/redis-windows) 설치로 대체한다. 2장 자료구조 표를 "이 데이터는 DB(SQLite/MySQL)인가 Redis인가" 판정표로 확장. 6장 Pub/Sub은 캡스톤 서버 간 통신 후보(유실 특성을 ADR에)
 - 주의: 코드 폴더 없음
 
 **프로메테우스를 이용한 게임 서버 모니터링** — `게임_서버-프로메테우스를_이용한_게임_서버_모니터링/README.md`
 - 언제: Phase 5 주 교재(전체)
 - 무엇: 모니터링 개념, Prometheus 아키텍처, **Windows 설치**(Prometheus·windows_exporter·Grafana), .NET 9 API/소켓 서버 예제 계측, 커스텀 Exporter, 알람, 대시보드, 운영 시나리오. 약 2,500줄
 - 어떻게: 예제 서버 대신 자기 3-1·4-1에 계측을 붙이며 3→4→6→8→9→10→11→12장 순으로. 부록 B(Grafana 쿼리 예제)를 대시보드 작업 시 옆에. C++ 트랙은 계측 코드를 prometheus-cpp로 번역
+- 주의: 10장 알림 경로가 Docker/Linux Alertmanager를 전제하면 Windows Alertmanager 바이너리 또는 Grafana Alerting+로컬 webhook으로 대체한다
 - 주의: 짧은 실습 가이드라 PromQL·히스토그램 버킷 설계 같은 깊은 내용은 공식 문서로 보강
 
 **fluentd를 이용한 로그 수집과 전송** — `게임_서버-fluentd를_이용한_로그_수집과_전송/README.md`
@@ -355,7 +356,7 @@
 2. (P2) 네트워크부터 이해하기 → 네트워크 이론(+로그/netstat 관찰) → C# Socket 1~7·9·10 → async 라이브러리 7 → 로드맵 1·2·7 → FreeNetLite → SuperSocketLite 1~6
 3. (P3) async 라이브러리 16~18 → 디자인 패턴 7~12·16 → 로드맵 3~5 → C# Socket 11 → SuperSocketLite 7 → 매칭 1·3 → 클라이언트 네트워크 4·5 → Async 완전 정복 10 → 네트워크 라이브러리 분석 → (선택) ECS
 4. (P4) API 실습 부록 A~C·F·G → MySQL Day 1·2 → API 실습 1~7 → MySQL Day 3·4 → API 실습 8~11 → Redis 1~5 → API 실습 12~14·16~18·20·22 → MySQL Day 5~7 → 가챠 9~12·16 → WebAPI 게임 서버 5~8·13·16 → 2D MMORPG 2주차
-5. (P5) C# Socket 8·부록 → Async 완전 정복 5·부록 B → 프로메테우스 전체 → fluentd 1~7·13 → API 실습 23·24 → async 라이브러리 14·19·20 → WebAPI 게임 서버 14·16·17 → 로드맵 5·6 → 가챠 15
+5. (P5) C# Socket 8·부록 → Async 완전 정복 5·부록 B → 프로메테우스 전체 → fluentd 1·2 통독(3~7·13 참조) → API 실습 23·24 → async 라이브러리 14·19·20 → WebAPI 게임 서버 14·16 → 로드맵 5·6 → 가챠 15
 6. (P6) 매칭 4~7 → 2D MMORPG 1~4·8 + 코드 → Redis 6 → 로드맵 8 → async 라이브러리 13·15 → 디자인 패턴 17 → 네트워크 책 2권 복습 → (선택) MonoGame·가챠·ECS·P2P 1~2
 
 ### 5.2 C++ 트랙
@@ -363,7 +364,7 @@
 2. (P2) 네트워크부터 이해하기 → 네트워크 이론(+로그/netstat 관찰) → TCP/IP Windows 소켓 1~6·8~11·13 + codes → 로드맵 1·2·7 → 모던 Windows 멀티스레딩 6 → (참고) WinRT 17·19·20 → (선택) Boost.Asio 1·2·4~7
 3. (P3) 모던 Windows 멀티스레딩 6·11·12 → TCP/IP 소켓 11·14 → 디자인 패턴 7~12·16(개념) → 로드맵 3~5 → Win32 API 2·4 → 매칭 1·3 → 클라이언트 네트워크 4·5 → (선택) Boost.Asio 11~14·17, ECS
 4. (P4) 경로 (a): MySQL Day 1·2·5(SQL) → Redis 1·2 → API 실습 부록 A~C·F·G → 가챠 9~12·16 + 공식 문서(cpp-httplib·MySQL Connector/C++·redis-plus-plus). 경로 (b): 필수 C# 가이드 전체 → C# 트랙 P4 순서
-5. (P5) Modern C++ 18·14 → 모던 Windows 멀티스레딩 10·부록 B·C → Win32 API 7·10·부록 C → 프로메테우스 전체(계측은 prometheus-cpp로) → fluentd 1~7·13 → TLS 4~6 → 메모리 모델 3·4부 → TCP/IP 소켓 12·13·14 → 로드맵 5·6
+5. (P5) Modern C++ 18·14 → 모던 Windows 멀티스레딩 10·부록 B·C → Win32 API 7·부록 C → 프로메테우스 전체(계측은 prometheus-cpp) → fluentd 1·2 통독(3~7·13 참조) → TLS 4~6 → 메모리 모델 3·4부 → TCP/IP 소켓 12·13·14 → 로드맵 5·6
 6. (P6) 매칭 4~7(아키텍처) → 2D MMORPG(참조 구성) → Redis 6 → 로드맵 8 → Modern C++ 17 → 모던 Windows 멀티스레딩 11 재독 → (선택) Boost.Asio 17·20·21, Rust처럼 안전한 C++ 1·16 → 네트워크 책 2권 복습
 
 ---
@@ -381,3 +382,16 @@
 - 저장소를 로컬에 클론하고, 과정 저장소의 `books/` 서브모듈 또는 심볼릭 링크로 연결해 Claude Code가 필요한 장을 바로 읽게 한다
 - 각 책 폴더에 `NOTES.md`를 만들어 "읽은 장 / 빌드한 예제 / 고친 오류 / 공식 문서와 다른 점"을 누적한다. Phase 말 평가 때 "AI(책)가 틀린 것" 증빙이 된다
 - 저장소가 갱신되므로(2026-08 기준 최신 추가: 2D MMORPG) Phase 시작 시 `git pull` 하고 변경된 책이 있으면 카드를 갱신한다
+
+### Phase별 읽기 예산과 모드
+
+| Phase | 통독 | 코드 분석 | 참조 | 예상 시간 |
+|---|---|---|---|---|
+| 1 | 지정 핵심 장 | Async/Windows 예제 | 보충 문법 | 34h |
+| 2 | 네트워크 기초 지정 장 | Socket/IOCP 코드 | 라이브러리 비교 | 42h |
+| 3 | 액터·상태·게임 루프 | 오목 예제 | ECS/매칭 | 36h |
+| 4 | API·DB·Redis 핵심 | API 구조 | MySQL/가챠 | 38h |
+| 5 | Prometheus, fluentd 1·2 | 프로파일링 예제 | 나머지 운영 장 | **46h 이하** |
+| 6 | 매칭 핵심 | 2D MMORPG 구조 | 선택 콘텐츠 | 32h |
+
+`통독`은 본문과 체크리스트를 모두 읽고, `코드 분석`은 빌드·실행·다이어그램 대조까지 하며, `참조`는 막힌 절만 찾는다.

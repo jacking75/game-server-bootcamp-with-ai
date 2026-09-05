@@ -32,6 +32,10 @@
 
 ## What I Did in 1 Hour Without AI
 - What I reimplemented and the result (success/partial/failure):
+- Coding-test problems completed (if applicable):
+
+## Time Usage
+- Planned h / actual h / difference and carried items:
 
 ## Assignment Progress
 - Assignment number: 
@@ -52,7 +56,7 @@
 ## Weekly Check Results
 | Item | Result |
 |---|---|
-| Reimplementation without AI (60 min) | Component: / Tests passed: /N |
+| Reimplementation without AI (N min) | Component: / Tests passed: /N |
 | Explanation test (3 topics) | Average score: / Weakest topic: |
 | Top 3 issues from code review | 1. 2. 3. (fix commit: ) |
 
@@ -68,7 +72,7 @@
 - Adjustments to AI usage rules for next week:
 
 ## Time Usage
-- Actual h out of planned 40h. Unfinished items and catch-up plan:
+- Actual __h out of planned 40h. Unfinished items and catch-up plan:
 
 ## Adjustments for Next Week
 - 
@@ -89,7 +93,7 @@ This project is a learning exercise. The learner (me) understanding all the code
 ## Environment
 - Windows 11, .NET 10 SDK, Visual Studio 2026 / VS Code
 - Tests: xUnit. Benchmarks: BenchmarkDotNet (Release only)
-- No Docker. No CI (build/test via local scripts). Default DB is SQLite (file-based); optionally MySQL 8 (swap implementation via Repository interface + DI). Redis runs locally via redis-windows(https://github.com/redis-windows/redis-windows)
+- No Docker. No CI (build/test via local scripts). Default DB is SQLite (file-based); optionally MySQL 8 (swap implementation via Repository interface + DI). Redis runs locally via redis-windows (https://github.com/redis-windows/redis-windows)
 
 ## Structure
 - src/<Project>.Net : Network layer (sessions, send/receive)
@@ -104,6 +108,8 @@ This project is a learning exercise. The learner (me) understanding all the code
 3. Document the owner of shared state in a comment. No locks in room logic (use a job queue instead)
 4. Socket buffers must always be borrowed from and returned to the pool
 5. Catch exceptions only at boundaries (handler entry points) and log with Serilog
+6. Include `traceId/requestId/service/instance` in logs; never log tokens, passwords, or secrets
+7. Configure ports and serverId rather than hard-coding them
 
 ## Agent Behavior Rules (for learning purposes)
 - When generating code, add a one-line comment to each class/major function explaining "why it was designed this way"
@@ -128,7 +134,8 @@ This project is a learning exercise. The learner (me) understanding all the code
 2. Do not call new/delete directly. Default to unique_ptr; use shared_ptr only when ownership sharing is required, with a comment
 3. The lifetime of every buffer pointed to by OVERLAPPED/WSABUF must be guaranteed until after the completion notification (state the owner)
 4. No mutex in room logic (use a job queue instead). When using atomic, comment the reasoning behind the chosen memory_order
-5. UB candidates (uninitialized reads, sign overflow, dangling references) are top priority in review
+5. UB candidates (uninitialized reads, signed integer overflow, dangling references) are top priority in review
+6. Include `traceId/requestId/service/instance` in logs, never log secrets, and configure ports/serverId
 
 ## Additional Agent Behavior Rules
 - When adding a new vcpkg dependency, note the reason, alternatives, and impact on build time
@@ -178,7 +185,11 @@ This project is a learning exercise. The learner (me) understanding all the code
 | Risk | Trigger Condition | Mitigation |
 |---|---|---|
 
-## 10. What Changed After Implementation (write once implementation is complete)
+## 10. Observability Plan
+| Signal | Name/Field | Purpose | Alert/Retention |
+|---|---|---|---|
+
+## 11. What Changed After Implementation (write once implementation is complete)
 | Item | Design | Actual | Reason |
 |---|---|---|---|
 ```
@@ -220,7 +231,7 @@ What was decided to do (one paragraph).
 # Performance Report: <Target Server> (<Date>)
 
 ## 1. Environment
-- Server machine (CPU/RAM/OS), client machine, network (loopback/LAN), build configuration (Release), version/commit
+- Server machine (CPU/RAM/OS), client machine, same-host/core allocation, network, power/background controls, DB backend, Release+PDB, version/commit
 
 ## 2. Scenario
 - Tool: (5-1 dummy client) / scenario name / number of connections / ramp-up / hold duration / repetition count
@@ -239,19 +250,26 @@ What was decided to do (one paragraph).
 | 1 | | | | |
 | 2 | | | | |
 | 3 | | | | |
+> Three hypotheses and **at least one rejection** are required.
 
-## 5. Changes Applied
+## 5. Profiler Results
+- Tool/duration/symbol path/top five stacks or allocations/interpretation:
+
+## 6. Changes Applied
 - Change 1: what / why / commit
 - Change 2:
 
-## 6. Final Before/After
+## 7. Final Before/After
 | Metric | Before | After | Change |
 |---|---|---|---|
 
-## 7. Side Effects / Costs
+## 8. Side Effects / Costs
 - Changes in memory/CPU/code complexity:
 
-## 8. Remaining Bottlenecks and Next Candidates
+## 9. Capacity Estimate
+- CPU and memory per connection / safe one-host capacity and headroom:
+
+## 10. Remaining Bottlenecks and Next Candidates
 - 
 ```
 
@@ -263,32 +281,33 @@ What was decided to do (one paragraph).
 # Runbook: <Service Name>
 
 ## Service Configuration
-| Service | Machine | Port | Run Account | Log Path | Health Check |
-|---|---|---|---|---|---|
+| Process | Port | PID File | Log Path | Health Check |
+|---|---|---|---|---|
 
 ## Common Commands
-- Check status: `Get-Service <name>`; start/stop: `Start-Service`/`Stop-Service`
+- Check status: `Get-Process -Id (Get-Content <pid-file>)`; port: `Get-NetTCPConnection -LocalPort <port>`
+- Start/stop all: `.\scripts\start-all.ps1` / `.\scripts\stop-all.ps1`; Redis: `redis-cli ping`
 - Recent logs: `Get-Content <path> -Tail 200`
 - Dashboard: <URL>, Alert list: <URL>
 
-## Incident 1: <Name> (e.g., MySQL not responding, if MySQL was chosen)
+## Incident 1: <process down / load spike / DB lock / Redis down / network block>
+- Last verified: / injection script:
 - Detection: Alert <name> / Symptoms (spike in login failures, dashboard panel X)
 - Diagnosis (within 5 minutes):
-  1. `Get-Service MySQL80` status (if MySQL was chosen)
+  1. PID, process, and listening-port state
   2. `DbTimeout` count in API server logs
   3. DB latency panel on the dashboard
 - Response:
-  1. Restart the service: `Restart-Service MySQL80`
+  1. Restart the executable or run `.\scripts\start-all.ps1`
   2. Check circuit breaker status (wait for automatic half-open)
 - Recovery confirmation: login success rate back to normal, alert cleared
 - Post-incident: write a postmortem, list items to prevent recurrence
 
 ## Incident 2: ...
 
-## Rollback Procedure
-- 
-
 ## Contacts/Escalation (if studying solo, "a note to my future self")
+
+> MySQL-path learners may use `Get-Service MySQL80` only as a DB-specific diagnostic.
 ```
 
 ---
@@ -309,6 +328,9 @@ What was decided to do (one paragraph).
 ## Why Detection Was Slow/Fast
 ## What Went Well / What Didn't
 ## Improvement Items (owner, deadline)
+
+## Reproduction
+- Injection script link / arguments / expected observations:
 ```
 
 ---
@@ -325,6 +347,10 @@ Rules:
 - At the end, score each question on a 5-point scale (5: principle, rationale, alternatives, and limitations all correct / 4: principle and rationale correct, alternatives or limitations weak / 3: concept correct but insufficient rationale / 2: partially incorrect / 1: unable to explain), then tell me the average and the 2 weakest topics.
 - Scoring table format: | Question | Score | Rationale |
 ```
+
+### T9-b. Extended 60-Minute Interview
+
+Spend 20 minutes on the portfolio, 25 on CS, and 15 on the track language. Use the same five-point rubric, reveal no answers during scoring, and finish with tables of unknown questions, weakly justified questions, and review order.
 
 ## T10. AI Quiz-Setter Prompt (Daily Morning Quiz)
 
@@ -353,4 +379,96 @@ Do not actually run the commands — judge based on the document alone. Point ou
 1) Things you have to guess because they're not in the document
 2) Steps that seem out of order or missing
 3) Points that seem like they won't finish within 10 minutes
+```
+
+---
+
+## T13. `AI-USAGE.md`
+
+```markdown
+# AI Usage
+| Work | My First Attempt | AI Request | Verification | Accepted/Modified/Rejected |
+|---|---|---|---|---|
+## Three Representative Cases
+## Two AI Errors and Official Evidence
+## Components Reimplemented Without AI
+## Sensitive-Input Check (secrets, personal data, company code)
+```
+
+## T14. `SECURITY-CHECK.md`
+
+```markdown
+# Security Check
+- [ ] Absolute/sliding token expiry, rotation, replay rejection
+- [ ] Bind identity to session; distrust packet/body userId
+- [ ] 100% parameterized SQL
+- [ ] Verify password cost and salt-bearing hash string
+- [ ] No secrets in repository, logs, or history
+- [ ] TLS enabled, or local-only rationale plus production migration plan
+```
+
+## T15. Repository `README.md`
+
+```markdown
+# Project Name
+## Problem, Scope, and Non-Goals
+## Architecture (link ARCHITECTURE.md)
+## Exact Environment and Versions
+## 10-Minute Local Run: build → configure → start → verify → stop
+## Ports, Processes, and serverId
+## Tests and Performance Results (commit/environment)
+## Fault Injection, Runbook, Security Check
+## AI Scope (link AI-USAGE.md)
+## Known Limitations and License
+```
+
+## T16. `ARCHITECTURE.md` and Contracts
+
+```markdown
+# Architecture
+## Components and Runtime Topology
+## Request, Match, and Game-Result Sequences
+## Session, Match, and Room State Machines
+## State Placement (DB/Redis/process memory and source of truth)
+## Failure Blast Radius and Degraded Mode
+## Scope, Milestones, and ADR Index
+
+# Minimal PROTOCOL.md / API.md
+Version / auth / messages-endpoints / types-limits / errors / idempotency / timeout / examples
+```
+
+## T17. Measurement, Metrics, and Fault Injection
+
+```markdown
+# Measurement Plan
+## Question/Hypothesis / Controls / Environment+Commit / Repetitions+Warmup / Success Criteria
+## Load Model, Think Time, Seed, Same-Host Status
+## JSON Report Schema
+{ "schemaVersion":1, "scenario":"", "seed":1, "connections":0, "sent":0, "received":0, "errors":{}, "latencyMs":{"p50":0,"p95":0,"p99":0,"max":0} }
+## Metric Design
+| Name | Type | Labels/Cardinality | Purpose | SLI/SLO | Alert |
+## Fault Injection
+| Fault | Expected Behavior | Script | Signals | Recovery Criterion |
+## Minimal alerts.yml
+groups:
+- name: game-server
+  rules:
+  - alert: GameServerDown
+    expr: up{job="game-server"} == 0
+    for: 1m
+```
+
+## T18. Test, Interview, and Presentation Pack
+
+```markdown
+# TEST-PLAN.md
+| Level | Scenario | Automation | Success Criterion | Result Link |
+# INTERVIEW-LOG.md
+| Date | Company/Role | Question | My Answer | Score | Follow-up |
+# Target Company Analysis
+| Company | Posting Stack | Required Skill | My Evidence | Gap |
+# Project Narrative
+Problem → constraints → choice and rejected alternatives → measured result → lesson
+# Blog/Slides/Demo
+Blog: problem-experiment-number-limit / 15 slides / 10 expected Q&As / four-part demo script and captions
 ```

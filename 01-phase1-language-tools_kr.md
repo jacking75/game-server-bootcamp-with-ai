@@ -735,7 +735,7 @@ gameserver-course-<이름>/
 
 #### L-CS-06 Channel 기반 큐 (90분) 🔴
 
-- **단계**: `Channel.CreateBounded<T>(new BoundedChannelOptions(cap){ FullMode = BoundedChannelFullMode.DropWrite })`로 큐 구성, `ReadAllAsync`로 소비 루프, `Writer.Complete()`로 종료
+- **단계**: `FullMode=Wait`로 구성한다. Drop 정책은 `TryWrite`의 `false`를 직접 집계하고, Block 정책은 `WriteAsync`를 사용한다. `ReadAllAsync`로 소비하고 `Writer.Complete()`로 종료한다
 - **확인 기준**: L-CS-04와 동일 시나리오 통과 + 코드 줄 수 비교(대체로 절반 이하)
 
 #### L-CS-07 BenchmarkDotNet 설정 (60분) 🔴
@@ -1099,7 +1099,10 @@ phase1/LogQueue/
    ```csharp
    public enum OverflowPolicy { Drop, Block }
 
-   public sealed record LogEntry(long Seq, int ProducerId, DateTime TimestampUtc, string Message);
+   public readonly record struct LogEntry(long Seq, int ProducerId, DateTime TimestampUtc, string Message);
+
+   public readonly record struct LogQueueStats(long Enqueued, long Dropped, long Written, int CurrentCount);
+   public interface ILogSink { void Write(in LogEntry entry); void Flush(); }
 
    public sealed class LogQueueOptions
    {
@@ -1149,6 +1152,9 @@ phase1/LogQueue/
    - `StopAsync()/Stop()`은 ① 신규 입력 차단 ② 잔여 항목 전부 파일 기록 ③ 파일 flush·close ④ 소비자 스레드 조인 순서
    - `Stop()` 이후 `Enqueue`는 항상 실패(예외 없이 false 권장)
    - 파일 한 줄 형식: `{seq}\t{producerId}\t{ISO8601 UTC}\t{message}`
+   - 메시지의 `\t`, `\r`, `\n`은 역슬래시 이스케이프하며 파일은 UTF-8(LF)로 기록한다
+   - `StopAsync()/Stop()`과 dispose는 멱등이다. Block 대기 중 Stop이 시작되면 대기 생산자를 깨워 `false`를 반환한다
+   - `ILogSink`/동등한 C++ 콜백을 주입해 파일 쓰기 실패를 재현하고, 싱크 예외는 소비자 루프를 죽이지 않고 오류 통계에 반영한다
 3. **정책**
    - `Drop`: 큐가 가득 차면 즉시 버리고 `Dropped++`, `Enqueue`는 false
    - `Block`: 자리가 날 때까지 생산자 대기(최대 대기 시간 옵션은 선택)
@@ -1188,7 +1194,8 @@ phase1/LogQueue/
 2. 파라미터: 생산자 수 1 / 4 / 16, 메시지 100바이트, 각 조건 10회 반복(워밍업 3회)
 3. 측정 지표: 처리량(msg/s), 항목당 할당 바이트(C# `MemoryDiagnoser`), `Enqueue` 지연 p50/p99
 4. **파일 I/O를 뺀 큐 자체 처리량**도 따로 측정(소비자가 그냥 버리는 모드) — 병목이 큐인지 디스크인지 분리
-5. 결과를 표로 저장하고 원시 출력도 `bench/results/`에 남긴다
+5. p50/p99는 `Stopwatch.GetTimestamp()`/`steady_clock`으로 항목별 샘플을 수집해 정렬 계산한다. BenchmarkDotNet/Google Benchmark 요약만으로 대체하지 않는다
+6. `bench/run.ps1`이 Release 빌드·실행·원시 결과 저장을 강제한다
 
 **REPORT-1-1.md 템플릿**
 
@@ -1223,7 +1230,7 @@ CPU / RAM / OS / 빌드 구성 / 런타임 버전 / 커밋 해시
 | 항목 | 배점 | 기준 |
 |---|---|---|
 | 정확성 | 30 | 테스트 15개 전부 통과, 불변식 3개 성립 |
-| 동시성 | 25 | 루브릭 2번 AI 리뷰 4점 이상, C++는 ASan 통과, 종료 경로에 교착 없음 |
+| 동시성 | 25 | 루브릭 2번 AI 리뷰 4점 이상, 1,000만 건 왕복 유실·중복 0을 10회 반복, 종료 경로에 교착 없음 |
 | 측정 | 25 | Release·워밍업·반복·분산 표기, 큐 단독 측정 분리 |
 | 리포트 | 20 | 수치 근거 결론, "AI가 틀린 것" 1건 이상 |
 
@@ -1265,15 +1272,16 @@ phase1/ObjectPool/
    template <std::size_t BufferSize = 4096>
    class BufferPool {
    public:
+       struct PoolDeleter;
+       using Handle = std::unique_ptr<std::byte[], PoolDeleter>;
        explicit BufferPool(std::size_t max_retained = 1024);
-       std::unique_ptr<std::byte[]> Rent();
-       void Return(std::unique_ptr<std::byte[]> buf);
+       Handle Rent();                       // Handle 소멸 시 같은 풀로 자동 반환
        PoolStats Stats() const;
    };
    ```
 2. **스레드 세이프**: 락 기반으로 시작. 여유가 있으면 스레드 로컬 캐시 + 전역 풀 2단계(🟡)
 3. **잘못된 사용 방어**
-   - 같은 객체 2회 `Return` 감지 → Debug 빌드에서 assert 또는 예외
+   - C#은 같은 객체 2회 `Return` 감지 → Debug 빌드에서 assert 또는 예외. C++은 이동 전용 `Handle`만 노출해 명시적 이중 반환을 타입으로 차단
    - 풀 크기를 넘는 반환은 폐기하고 `Discarded++`
    - 소멸 시 미반환 개수를 경고 로그로(C++는 소멸자, C#은 `Dispose`)
 4. **통계**: 대여/반환/생성/폐기/현재 보유 수
@@ -1285,7 +1293,7 @@ phase1/ObjectPool/
 | 1 | Rent_빈풀_새버퍼생성 | Created == 1 |
 | 2 | Return후Rent_재사용 | Created 증가 없음 |
 | 3 | 최대보유초과_폐기 | Discarded > 0, CurrentRetained ≤ maxRetained |
-| 4 | 이중반환_감지 | Debug에서 예외/assert |
+| 4 | 이중반환_감지 | C#은 Debug 예외/assert, C++은 복사·명시 반환 API가 컴파일되지 않음 |
 | 5 | 멀티스레드_대여반환_정합성 | 8스레드×10,000회 후 통계 일치 |
 | 6 | 반환된버퍼_내용초기화정책 | 문서화한 정책대로(초기화 여부 고정) |
 | 7 | 소멸시_미반환경고 | 경고 로그 1건 |
@@ -1294,7 +1302,7 @@ phase1/ObjectPool/
 **측정 요구**
 
 - **C#**: `new byte[4096]` 매번 / 자작 풀 / `ArrayPool<byte>.Shared` **3자 비교**를 `MemoryDiagnoser`로. 추가로 `dotnet-counters monitor --counters System.Runtime`로 Gen0 수집 횟수 관찰 캡처
-- **C++**: `new/delete` vs 풀 비교(Google Benchmark), ASan 빌드에서 누수 0 확인
+- **C++**: `new/delete` vs 풀 비교(Google Benchmark). ASan은 UAF·범위 오류 검출에 사용하고, 누수 판정은 CRT 디버그 힙/VS 메모리 스냅숏과 `Rented == Returned`, `Created == destroyed+retained` 카운터로 증명
 - 표에는 처리량·항목당 할당·GC 횟수(또는 할당 호출 수)를 함께 적는다
 
 **REPORT-1-2.md 필수 내용**: 3자(또는 2자) 비교표 / 풀이 이득이 아닌 조건 1개 이상(예: 버퍼 수명이 매우 짧고 크기가 작을 때) / Phase 2에서 이 풀을 어떻게 쓸지 2문장
@@ -1448,3 +1456,28 @@ phase1/ObjectPool/
 - [ ] Phase 2에서 쓸 포트 대역(예: 9000~9100)이 방화벽에서 막히지 않는지 확인. 필요하면 인바운드 규칙 추가
 - [ ] 로컬 루프백 테스트 시 동적 포트 고갈을 대비해 현재 설정 확인: `netsh int ipv4 show dynamicport tcp`
 - [ ] Phase 1 회고를 회고 노트에 남긴다: 가장 오래 막힌 지점, AI를 잘못 쓴 사례 1개, 다음 Phase에 가져갈 습관 1개
+
+---
+
+## 11. 2026-09-05 보강 사항 (앞 절과 충돌하면 이 절 우선)
+
+### 11.1 현실화한 일정과 필수 실습
+
+- 주간 40시간은 개념 12h, 실습·과제 14h, AI 없는 재구현 5h, 리뷰·평가 4h, 완충 5h로 계산한다. 1-C/1-1/1-2의 명목 시간은 읽기·재구현·리뷰를 포함하며 실제 구현 슬롯은 각각 6h/14h/10h다
+- 6일차 오전에 워커 예외·파일 쓰기 실패·디스크 풀 정책과 페이크 싱크 테스트를 2h 배치한다. 7일차에는 `appsettings.json`/`IOptions<T>` 또는 JSON/TOML 설정 로딩 30분을 배치한다
+- 12일차에 Serilog `Sinks.Async(blockWhenFull)`와 spdlog `block/overrun_oldest`를 내 큐와 비교하고, `ILogSink` 테스트 더블·행(hang) 덤프·Release+PDB 디버깅을 실습한다
+- 14일차 C++ 필수 블록은 `L-CPP-11`·`L-CPP-12` 90분이다. C#은 `L-CS-10`·`L-CS-11`·`L-CS-12` 중 2개를 수행한다. `L-CS-08`은 콘솔에서 재현 가능한 함정 5개만 필수로 줄인다
+- 각 주에 반일 완충 슬롯을 두고 미완료 실습을 우선 소진한다. 9일차 교재 통독은 저녁/주말 참고 모드로, 10일차 장시간 테스트는 12일차로 이동한다
+
+### 11.2 도구·메모리·테스트 보강
+
+- MSVC ASan은 UAF·범위 오류는 잡지만 LeakSanitizer·데이터 레이스 검출은 제공하지 않는다. 누수는 `_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF)`, VS 메모리 스냅숏, 대여/반환·생성/소멸 카운터로 판정한다
+- C# false sharing(`[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset]` 패딩), AoS/SoA, `Volatile.Read/Write`, `Interlocked`, .NET 9+ `System.Threading.Lock`을 비교한다. C++은 `InitOnce`, Event, `WaitForMultipleObjects`, `WaitOnAddress`/`atomic::wait`를 종료·Block 대기에 연결한다
+- `Stopwatch`/`QueryPerformanceCounter`/`steady_clock`과 wall clock의 차이, 임시 디렉터리 fixture, 테스트별 timeout, slow-test 분리, `IClock` 주입을 공통 규율로 적용한다
+- `git bisect`, `reflog`, `revert`, 태그, pre-commit 훅으로 `scripts/build-and-test.ps1` 실행, `.gitattributes`의 LF 정책을 실습한다. `global.json`을 1-C 산출물에 포함한다
+
+### 11.3 평가·AI 검증
+
+- 1-1에 싱크 예외 시 큐 생존·오류 통계 증가 테스트를 추가한다. C# lock 버전 300k msg/s, C++ SPSC 5M msg/s는 합격선이 아닌 참고 기준이며 환경 차이를 기록한다
+- 질문 은행에 `volatile`과 원자성, false sharing, `steady_clock`, 테스트 더블, hang dump, ASan의 한계를 추가한다. AI가 lock-free를 무조건 빠르다고 하거나 ASan을 누수/레이스 검출기로 설명하면 공식 문서와 계측으로 반박한다
+- Phase 2 IOCP 수신 버퍼는 OVERLAPPED 완료까지 RAII 핸들이 소유하고, 크기·슬라이스·워커 수·대여 빈도를 `REPORT-1-2.md`에 미리 명시한다

@@ -821,12 +821,13 @@ IOCP 에코 서버를 만들려 한다. 전체 코드를 한 번에 주지 말�
 | 2 | 2 | `PacketId` | uint16 | 패킷 종류 |
 | 4 | 1 | `Version` | uint8 | 프로토콜 버전. 불일치 시 거부 |
 | 5 | 1 | `Flags` | uint8 | bit0 압축, bit1 암호화(이번 Phase 미사용) |
-| 6 | 2 | `Reserved` | uint16 | 정렬용, 0 고정 |
+| 6 | 2 | `Reserved` | uint16 | 체크섬·향후 확장용, 현재는 0 고정 |
 | 8 | N | `Body` | bytes | 직렬화된 페이로드 |
 
 - 엔디안: **리틀 엔디안 고정**(x86 기준, 변환 비용 제거) 또는 네트워크 바이트 오더 — 택일하고 근거를 적는다
-- 최대 패킷 크기: 64KB(초과 시 즉시 세션 종료)
+- 최대 패킷 크기: **65,535바이트**(uint16으로 표현 가능한 최댓값, 초과 시 즉시 세션 종료)
 - 최소 패킷 크기: 헤더 크기(8). `TotalLength < 8`이면 오류
+- 문자열은 UTF-8, 길이는 `uint16` 바이트 수 접두사로 표현한다. 배열 원소 수는 `uint16`으로 표현하고 상한을 패킷별로 명시한다
 
 **요구사항 2 — 패킷 ID 체계**
 
@@ -882,7 +883,9 @@ any --하트비트 타임아웃/오류/종료 요청--> Closing --> Closed
 **요구사항 5 — 규칙**
 - 하트비트: 클라이언트 10초 주기 송신, 서버는 마지막 수신 후 30초 무응답 시 종료
 - 버전 불일치: `VersionCheckRes(result=VersionMismatch)` 후 즉시 종료
-- 에러 코드 표: `0=Success, 1=InvalidPacket, 2=InvalidState, 3=NameDuplicated, 4=RoomFull, 5=RoomNotFound, 6=VersionMismatch, 7=RateLimited, ...`
+- 에러 코드 표: `0=Success, 1=InvalidPacket, 2=InvalidState, 3=NameDuplicated, 4=RoomFull, 5=RoomNotFound, 6=VersionMismatch, 7=RateLimited, 8=TargetOffline, 9=ServerFull, ...`
+- `ChatNotify.seq`는 방별 단조 증가 `uint64`다. 귓속말 대상이 오프라인이면 `TargetOffline`을 반환한다. `RateLimited`가 3회 누적되면 세션을 종료한다
+- `DisconnectNotify`는 송신 완료 콜백 또는 2초 타임아웃 뒤에 소켓을 닫는다
 
 **요구사항 6 — ADR**: `adr/0001-serialization.md` — 직렬화 방식 선택(맥락·결정·대안 3개·기각 이유·결과). 템플릿은 `08-templates.md` T5
 
@@ -915,6 +918,7 @@ any --하트비트 타임아웃/오류/종료 요청--> Closing --> Closed
 5. **오류 처리**: 손상 패킷(길이/ID/상태 불일치) 수신 시 로그 + 해당 세션만 종료. 서버는 생존
 6. **graceful shutdown**: Ctrl+C 시 ① 신규 접속 차단 ② `DisconnectNotify` 브로드캐스트 ③ 송신 완료 대기(최대 2초) ④ 소켓 정리 ⑤ 스레드 조인. 5초 내 완료
 7. **설정 파일**: 포트, 워커 스레드 수, 수신 버퍼 크기, 최대 접속 수, 타임아웃, 로그 레벨. C#은 `appsettings.json`, C++은 TOML/JSON
+8. **접속 상한**: 최대 접속 수를 넘으면 `ErrorNotify(ServerFull)` 송신 완료 후 종료한다. 동일 IP 상한과 세션별 패킷 속도 상한을 설정으로 둔다
 
 **비기능 요구사항 (측정으로 증명)**
 
@@ -936,6 +940,7 @@ ChatServer/
 └─ tests/    Logic 단위 테스트 + Net 통합 테스트
 ```
 - `Logic`은 `ISessionSender { void Send(int sessionId, ReadOnlySpan<byte>); void Close(int sessionId); }` 같은 인터페이스만 안다 → 테스트에서 페이크로 대체
+- IOCP 워커/SAEA 콜백은 `Logic`을 동시에 호출할 수 있으므로 **Logic 전역 락 1개**로 방·유저 상태를 보호한다. 직렬화와 실제 `Send` 호출은 락 밖에서 수행한다
 - 수신/송신 버퍼는 **1-2 오브젝트 풀** 사용
 - 세션별 송신 큐로 동시 송신 방지
 
@@ -1053,16 +1058,17 @@ public:
 | 8 | 경계정확히 | 버퍼 크기와 동일 | Ok |
 | 9 | 길이0 | TotalLength=0 | BadLength |
 | 10 | 길이<헤더 | TotalLength=5 | BadLength |
-| 11 | 길이초과 | TotalLength=70000 | TooLarge |
+| 11 | 설정상한초과 | `maxPacketSize=1024`, TotalLength=2000 | TooLarge |
 | 12 | 버전불일치 | Version=99 | BadVersion |
 | 13 | 미정의ID | Id=9999 | Ok(파서는 통과, 상위에서 판단) |
-| 14 | 최대크기패킷 | 정확히 64KB | Ok |
+| 14 | 최대크기패킷 | 정확히 65,535바이트 | Ok |
 | 15 | 연속1000패킷 | 1,000개 연속 | 전부 Ok, 순서 유지 |
 | 16 | Reset후재사용 | 오류 후 Reset | 정상 파싱 재개 |
 | 17 | 라운드트립_채팅 | ChatNotify 직렬화→역직렬화 | 필드 일치 |
 | 18 | 라운드트립_방목록 | 가변 배열 포함 | 필드 일치 |
 | 19 | 문자열_UTF8 | 한글 200자 | 손상 없음, 길이 검증 |
 | 20 | 할당0_정상경로 | 1만 패킷 파싱 | (C#) 할당 0 또는 상수 |
+| 21 | 무작위퍼징 | 무작위 1MB를 1~100B 조각으로 Feed | 예외·크래시 0, 오류 코드 또는 NeedMore만 |
 
 **제출물**: 라이브러리 프로젝트, 테스트 20개, 사용 예제(10줄), README(사용법·버퍼 반환 규칙)
 
@@ -1085,6 +1091,9 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 | `--scenario` | `chat` \| `storm` \| `garbage` | chat |
 | `--duration` | 정상 상태 유지 시간(초) | 300 |
 | `--msg-interval` | 메시지 주기(ms) | 1000 |
+| `--msg-size` | 메시지 바이트 크기 | 50 |
+| `--graceful-ratio` | storm 정상 종료 비율(0~1) | 0.5 |
+| `--seed` | 재현용 난수 시드 | 1 |
 | `--rooms` | 분산할 방 개수 | conn/50 |
 | `--out` | 결과 파일 경로(JSON) | stdout |
 
@@ -1101,6 +1110,8 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 - 5초마다 콘솔 요약, 종료 시 JSON + 마크다운 표 파일 저장
 
 **정확성 요구**: p99 계산을 알려진 데이터셋(1~1000)으로 검증하는 단위 테스트 필수
+
+클라이언트 I/O는 비동기 이벤트 루프/IOCP/SAEA 중 하나를 사용하며 스레드-퍼-커넥션을 금지한다. JSON에는 입력 인자·시드·환경·접속/메시지/지연/종료 사유 카운터를 고정 필드로 기록한다.
 
 **제출물**: 코드, 500접속 실행 결과 파일 2건(chat/storm), 사용법 README
 
@@ -1219,3 +1230,34 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 - [ ] `08-templates.md`의 T4(설계 문서)·T5(ADR) 템플릿을 미리 읽고, Phase 3에서 쓸 `DESIGN.md` 빈 문서를 만들어 둔다
 - [ ] 채팅 서버의 "방" 코드를 Phase 3의 "룸 액터"로 바꿀 때 무엇이 달라져야 할지 3줄 메모(스레드 소유권 관점)
 - [ ] Phase 2 회고: 가장 오래 막힌 버그와 그 원인, AI가 틀렸던 사례 1개, Phase 3에 가져갈 습관 1개
+
+---
+
+## 11. 2026-09-05 보강 사항 (앞 절과 충돌하면 이 절 우선)
+
+### 11.1 일정 재배치와 완충
+
+- 2-2는 22~24일차 3일로 확장한다. C++은 `BinaryReader/Writer` 헬퍼를 먼저 만들고 20종 패킷을 작성한다. `L2-CPP-05`는 27일차, 2-3의 `garbage`와 대규모 접속 함정은 33일차 오전으로 이동한다
+- 25~26일차 초과 실습을 나누고, 31일차와 33일차 오전을 2-3 전용으로 확보한다. 매주 반일 완충 슬롯에서 미완료 네트워크 실습을 소진한다
+- 과제 시간은 개념·교재·AI 없는 재구현·리뷰를 포함한 상한이다. 실제 구현 슬롯은 2-C 6h, 2-1 42h, 2-2 18h, 2-3 10h, 2-4 6h로 계획한다
+
+### 11.2 대규모 접속·TCP 의미론
+
+#### L2-CS-06 대규모 SAEA 접속 함정 (90분) 🔴
+- **단계**: pinned 64KB×1,000 대기 수신과 recv 2개를 재현하고, 풀 슬라이스·소켓당 recv 1개로 수정한다
+- **확인 기준**: 10055/완료 순서 로그와 수정 전후 pinned 메모리 표
+
+#### L2-CPP-07 대규모 IOCP 접속 함정 (90분) 🔴
+- **단계**: OVERLAPPED 버퍼 수명, 10055, zero-byte recv, 소켓당 recv 1개를 재현·수정한다
+- **확인 기준**: 1,000접속 유지, 세션·버퍼 카운터 원복, 완료 순서 로그
+
+- `L2-CS-06/L2-CPP-07 대규모 접속 함정`(90분): 소켓당 미해결 recv는 1개만 둔다. 64KB×1,000 대기 recv로 `WSAENOBUFS(10055)`를 관찰한 뒤 작은 풀 버퍼/zero-byte recv로 수정하고, recv 2개를 걸어 완료 순서 붕괴 로그를 남긴다
+- C#은 pinned object heap(`GC.AllocateArray(..., pinned:true)`), SAEA 버퍼 슬라이스, `BufferList`를 다룬다. C++은 OVERLAPPED 완료까지 버퍼 수명을 보장한다
+- keep-alive와 앱 하트비트, `shutdown(SD_SEND)` half-close, backlog 초과, `SO_EXCLUSIVEADDRUSE`, 송수신 버퍼, CLOSE_WAIT 진단을 30분 실습 3개로 수행한다
+- TLS/`SslStream`, 평문 TCP 위험, IPv6 `DualMode`, 프로토콜 하위 호환, 포트 0 in-process 테스트와 주입 가능한 시계를 개념·테스트 항목에 포함한다
+
+### 11.3 평가·AI 검증
+
+- `L2-C-16`은 워커 4개가 입장/퇴장 1만 회를 동시에 수행해 방·유저 카운터가 일치해야 통과한다. 5초 주기 카운터 로그와 `COMPARE-2-1.md`를 필수 제출물로 둔다
+- 질문 은행에 IOCP 완료 순서, 미해결 recv 1개, 10055, half-close, TIME_WAIT, Nagle, 프레이밍 퍼징, Logic 락 범위를 추가한다. 결함 주입에는 락 없는 방 딕셔너리를 포함한다
+- AI가 콜백 1개=스레드 1개, `ReceiveAsync=true`=성공, TCP 메시지 경계 보장, 무제한 pinned 버퍼를 제안하면 반례 로그와 공식 API 계약으로 검증한다

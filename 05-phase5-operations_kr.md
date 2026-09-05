@@ -60,6 +60,8 @@ phase5/
 ├─ observability/
 │  ├─ prometheus.yml           스크레이프 설정
 │  ├─ alerts.yml               알람 규칙 2개 이상
+│  ├─ alertmanager.yml         또는 Grafana contact point 설정
+│  ├─ webhook.ps1              로컬 수신 로그·토스트
 │  ├─ dashboard.json           Grafana 대시보드 내보내기
 │  └─ screenshots/             부하 중·알람 발동 캡처
 ├─ resilience/                 재시도·서킷 브레이커·백프레셔 직접 구현
@@ -243,7 +245,7 @@ phase5/
 
 **오후 (2.5h)**
 - `L5-C-12` 대시보드 구축(5행 이상, 패널 15개 이상). 각 패널에 설명 주석
-- `L5-C-13` 알람 2개 이상: 착수 p99 > 100ms 1분 지속 / 에러율 > 1% 1분 지속. 발동 시 로그 또는 Windows 알림
+- `L5-C-13` 알람 2개 이상: 착수 p99 > 100ms 1분 / 에러율 > 1% 1분. Alertmanager 또는 Grafana contact point가 로컬 webhook으로 전달
 - 부하를 걸어 그래프가 움직이는 것과 알람이 실제로 발동하는 것을 캡처
 
 **AI 없는 1시간**
@@ -931,10 +933,10 @@ GC(또는 컨텍스트 스위칭) 지표는 (첨부), 대시보드 스크린샷 
 3. **API 서버(4-1) 지표 6종**: 엔드포인트별 요청 수·에러 수·지연 히스토그램, DB 쿼리 지연, Redis 명령 지연, 커넥션 풀 사용률
 4. **시스템**: windows_exporter의 CPU·메모리·네트워크·디스크
 5. **대시보드 1개**: 5행(개요 / 게임 서버 / API 서버 / DB·Redis / 시스템), 패널 15개 이상, 인스턴스 변수. **각 패널에 "왜 넣었는지" 설명**
-6. **알람 2개 이상**: 착수 p99 > 100ms 1분 지속 / 에러율 > 1% 1분 지속. 발동 시 로그 또는 Windows 알림. **실제 발동 증거** 필요
+6. **알람 2개 이상**: 착수 p99 > 100ms 1분 / 에러율 > 1% 1분. Alertmanager/Grafana→webhook 경로와 **수신 로그 증거** 필요
 7. **로그**: 구조화 로그를 파일로 남기고 일 단위 롤링. 🟡 fluent-package로 수집 실습
 
-**제출물**: `prometheus.yml`, `alerts.yml`, `dashboard.json`, 부하 중 스크린샷, 알람 발동 로그, 메트릭 설계서
+**제출물**: `prometheus.yml`, `alerts.yml`, `alertmanager.yml` 또는 Grafana contact point 설정, `webhook.ps1`, `dashboard.json`, 부하/수신 캡처, 메트릭 설계서
 
 **채점**
 
@@ -1168,3 +1170,39 @@ class TokenBucket {
 - [ ] 관측 스택이 인스턴스 라벨로 서버를 구분할 수 있는지 확인(캡스톤에서 서버별 패널 필요)
 - [ ] 교재 "FPS 게임 매칭 시스템 만들기" 4~7장, "2D MMORPG 게임 서버 개발" 클론
 - [ ] Phase 5 회고: 가장 값진 기각 가설, 관측 덕분에 빨리 잡은 문제, AI가 틀린 사례 1개
+
+---
+
+## 11. 2026-09-05 보강 사항 (앞 절과 충돌하면 이 절 우선)
+
+### 11.1 측정 타당성과 관측 계약
+
+- 76일차 오전 40분에 closed/open 부하 모델, coordinated omission, 동일 PC 간섭, 코어 고정(`ProcessorAffinity`), Windows 동적 포트/TIME_WAIT를 학습한다. 환경표에 부하 도구 동일 PC 여부·코어 배분·DB 백엔드·클라이언트 CPU를 기록한다
+- 고접속 실험 전 `netsh int ipv4 show dynamicport tcp`를 기록한다. 필요 시 관리자 권한으로 `start=10000 num=50000`, `TcpTimedWaitDelay=30`을 적용하고 원복 절차를 남긴다
+- SLI/SLO/에러 버짓을 30분 학습하고 메트릭에 `instance`·`server_id` 라벨을 둔다. 히스토그램 버킷은 초 단위 `0.001,0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0`으로 통일한다
+- 계측 오버헤드는 1% 절대 판정 대신 반복 편차 범위 내 유의미한 열화 없음으로 판단한다. 정상 유저 성공률은 95% 이상, 방어 후 p99는 기준선×1.5 이하, 자동 복구는 30초 이하로 수치화한다
+- 구조화 로그는 `timestamp,level,service,instance,requestId,traceId,sessionId,userId,roomId,event,durationMs,resultCode`를 표준 필드로 하고 7일/용량 상한을 설정한다. HTTP `X-Request-Id`와 게임 패킷 traceId를 전파한다
+
+### 11.2 알람·복원력·종료
+
+#### L5-C-29b Graceful shutdown (45분) 🔴
+- **단계**: 신규 접속 거부→룸 통지→진행 게임 정책 적용→결과 큐 flush→프로세스 종료
+- **확인 기준**: 5초 내 종료, 결과 유실·중복 0, PID/포트 해제
+
+- 알람 경로는 **Prometheus rule→Alertmanager Windows 바이너리→로컬 webhook** 또는 **Grafana Alerting contact point→로컬 webhook** 중 하나를 필수로 구현한다. `L5-C-13`은 webhook 파일 로그/토스트 수신 캡처가 있어야 통과한다
+- 5-4 결과 저장 큐는 파일 내구성 큐 또는 메모리 큐 중 하나를 ADR로 결정한다. Phase 4 멱등 키를 선수 조건으로 두고 SQLite 30초 잠금·프로세스 종료·신규 연결 방화벽 차단을 스크립트로 주입한다
+- 98일차 `L5-C-29b Graceful shutdown`(45분): 신규 접속 거부→룸 통지→결과 큐 flush→프로세스 종료를 검증한다. 97일차 오후에는 30분~2시간 soak 테스트로 힙·핸들 추세를 기록한다
+- C++ 트랙은 CRT/VS로 핸들·메모리 누수 추적 45분과 HTTP 클라이언트(cpp-httplib/WinHTTP) 결정을 수행한다. C# 메모리 손상 대체는 `Environment.FailFast` 또는 명시적 `Marshal` 시나리오만 사용한다
+
+### 11.3 일정·산출물·보안
+
+- 5-1의 필수 제출 기준은 재현 가능한 500접속이고 1,000은 권장이다. CLI에 think time·seed·메시지 크기·정상 disconnect 비율을 넣고 JSON 스키마를 T17로 고정한다
+- 83일차 `L5-C-11`은 84일차 오전으로, `L5-C-12`는 84일차 오후~85일차 오전으로 분산한다. fluentd는 1·2장만 통독하고 나머지는 참조한다. 95일차 방어는 미인증 타임아웃·IP 제한 2종만 필수다
+- 5-1/5-4/5-6 계획 시간은 14h/32h/10h로 재산정하고 매주 반일 완충 슬롯을 둔다. 5-3은 **삭제된 배포 과제(번호 보존)**로 과제 번호표에 남긴다
+- `SECURITY-CHECK.md`는 토큰 만료·replay, 패킷 userId 무신뢰/세션 바인딩, SQL 파라미터화, 비밀번호 해시, 시크릿, TLS를 검사한다. 환경별 설정과 포트/serverId 분리 실습 30분을 포함한다
+- 성능 리포트에 접속당 CPU·메모리와 1대 최대 접속 수 추정, 가설 3개와 기각 1개, Release+PDB·원시 데이터·커밋 해시를 포함한다
+
+### 11.4 AI·질문·막힘 검증
+
+- PromQL의 `sum by(le)`, `rate` 창(스크레이프×2 이상), 카운터 리셋을 검증한다. Docker/Linux `tc`·`iptables`, Polly v7 API, 별도 패키지 없는 `KestrelMetricServer` 제안을 그대로 쓰지 않는다
+- 질문 은행에 부하 모델, 동일 PC 왜곡, TIME_WAIT, SLO/알람, requestId, 안전 종료, 누수/GC, 재시도 멱등, 용량 추정을 추가한다. 막힘 표에 10048/10055, histogram NaN, firing 미전달, datasource UID, PDB 심볼, trace 대용량, keep-alive 방화벽, flaky clock을 추가한다

@@ -62,6 +62,8 @@ phase5/
 ├─ observability/
 │  ├─ prometheus.yml           Scrape configuration
 │  ├─ alerts.yml               2+ alert rules
+│  ├─ alertmanager.yml         or Grafana contact-point config
+│  ├─ webhook.ps1              local delivery log/toast
 │  ├─ dashboard.json           Grafana dashboard export
 │  └─ screenshots/             Captures during load and alert firing
 ├─ resilience/                 Directly implemented retry, circuit breaker, backpressure
@@ -245,7 +247,7 @@ phase5/
 
 **Afternoon (2.5h)**
 - `L5-C-12` Build dashboard (5+ rows, 15+ panels). Add explanatory annotations to each panel
-- `L5-C-13` 2+ alerts: move p99 > 100ms sustained for 1 minute / error rate > 1% sustained for 1 minute. Log or Windows notification when triggered
+- `L5-C-13` 2+ alerts: move p99 >100ms for 1 minute / error rate >1% for 1 minute, delivered through Alertmanager or Grafana to a local webhook
 - Apply load and capture both the graph moving and the alert actually firing
 
 **1 Hour Without AI**
@@ -741,7 +743,7 @@ phase5/
 
 ---
 
-## 4. Detailed Learning Items
+## 4. Learning Items in Detail
 
 ### 4.1 Common (140h)
 
@@ -803,7 +805,7 @@ phase5/
 
 ---
 
-## 5. Book Usage Guide (Phase 5)
+## 5. Textbook Guide (Phase 5)
 
 ### 5.1 Common
 
@@ -837,14 +839,14 @@ phase5/
 | Safe and Elegant Programming with Modern C++ | Ch.18 (performance benchmarking), Ch.14 (parallel algorithms) | Day 76 | Re-review benchmarking methodology |
 | Docker for Game Server Developers | Not read | — | This course does not use Docker |
 
-### 5.4 Supplementary Track Reading Assignment
+### 5.4 Secondary-Track Reading
 
 - C# main track: Modern Windows Multithreading Ch.10 → 1 page on "what do you see when you look at a .NET server through ETW" (PerfView is also ETW-based)
 - C++ main track: Mastering C# Async/Await Ch.5 → 1 page on "the relationship between .NET thread starvation and IOCP worker shortage"
 
 ---
 
-## 6. AI Collaboration Guide (Phase 5 Specific)
+## 6. AI Collaboration Guide (Phase 5)
 
 ### 6.1 Prompts
 
@@ -933,10 +935,10 @@ Don't give me fixed code, just point out the problem spots.
 3. **API Server (4-1) — 6 Metrics**: requests/errors/latency histogram per endpoint, DB query latency, Redis command latency, connection pool utilization
 4. **System**: CPU, memory, network, disk from windows_exporter
 5. **1 Dashboard**: 5 rows (overview / game server / API server / DB·Redis / system), 15+ panels, instance variable. **Explain "why it was added" on each panel**
-6. **2+ Alerts**: move p99 > 100ms sustained for 1 minute / error rate > 1% sustained for 1 minute. Log or Windows notification when triggered. **Evidence of it actually firing** required
+6. **2+ Alerts**: move p99 >100ms for 1 minute / error rate >1% for 1 minute. Require Alertmanager/Grafana→webhook delivery and a captured receipt log
 7. **Logs**: write structured logs to files with daily rolling. 🟡 lab: collect with fluent-package
 
-**Submission**: `prometheus.yml`, `alerts.yml`, `dashboard.json`, screenshots during load, alert-firing logs, metric design document
+**Submission**: `prometheus.yml`, `alerts.yml`, `alertmanager.yml` or Grafana contact-point config, `webhook.ps1`, `dashboard.json`, load/delivery captures, metric design document
 
 **Grading**
 
@@ -1067,7 +1069,7 @@ Change 1: what / why / commit hash / impact on code complexity
 
 ---
 
-## 8. Learning Completion Assessment (Friday, Day 100)
+## 8. Learning Completion Assessment (Day 100, Friday)
 
 ### 8.1 Checklist
 
@@ -1162,7 +1164,7 @@ Infinite retry / missing timeout / metric cardinality explosion / secrets in log
 
 ---
 
-## 10. Preparing Before Moving to Phase 6
+## 10. Preparing for Phase 6
 
 - [ ] Read the capstone requirements (document 06 §7.1) and prepare for the scope-decision meeting (AI PM review) in the first two days of Week 21
 - [ ] Confirm you can **run 2 game servers simultaneously on different ports on your local PC** (port and server ID separated via config file)
@@ -1170,3 +1172,39 @@ Infinite retry / missing timeout / metric cardinality explosion / secrets in log
 - [ ] Confirm the observability stack can distinguish servers by instance label (per-server panels needed in the capstone)
 - [ ] Books: "Building an FPS Game Matchmaking System" Ch.4-7, "2D MMORPG Game Server Development" clone
 - [ ] Phase 5 retrospective: the most valuable rejected hypothesis, a problem caught quickly thanks to observability, one case where AI was wrong
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Measurement validity and observability contract
+
+- Day 76 adds 40 minutes on closed/open models, coordinated omission, same-host interference, `ProcessorAffinity`, and Windows dynamic ports/TIME_WAIT. Record same-host status, core allocation, DB backend, and client CPU
+- Before connection floods, record `netsh int ipv4 show dynamicport tcp`; if needed, apply `start=10000 num=50000` and `TcpTimedWaitDelay=30` as administrator, with rollback steps
+- Add 30 minutes on SLI/SLO/error budget; require `instance` and `server_id`. Standardize histogram buckets in seconds as `0.001,0.005,0.01,0.025,0.05,0.1,0.25,0.5,1.0`
+- Judge instrumentation overhead as no significant regression beyond repeat variance. Require normal-user success ≥95%, defended p99 ≤ baseline×1.5, and automatic recovery ≤30s
+- Standard log fields are `timestamp,level,service,instance,requestId,traceId,sessionId,userId,roomId,event,durationMs,resultCode`, with seven-day/cap retention. Propagate HTTP `X-Request-Id` and packet traceId
+
+### 11.2 Alerts, resilience, and shutdown
+
+#### L5-C-29b Graceful Shutdown (45 min) 🔴
+- **Steps**: reject new sessions → notify rooms → apply in-progress-game policy → flush results → exit
+- **Acceptance criteria**: exit within five seconds, zero lost/duplicate results, PID and port released
+
+- Require either Prometheus rule→Windows Alertmanager→local webhook or Grafana Alerting contact point→local webhook. `L5-C-13` passes only with captured webhook file-log/toast delivery
+- Decide a file-durable or memory result queue in an ADR, require Phase 4 idempotency, and script a 30-second SQLite lock, process stop, and firewall block of new connections
+- Day 98 adds `L5-C-29b Graceful shutdown` (45 min): reject new sessions, notify rooms, flush results, exit. Day 97 adds a 30-minute-to-two-hour soak with heap/handle trend
+- C++ adds 45 minutes of CRT/VS handle-memory tracking and an HTTP client decision. C# crash injection uses only explicit `Environment.FailFast` or `Marshal` scenarios
+
+### 11.3 Schedule, deliverables, security
+
+- The required 5-1 submission is reproducible 500 connections; 1,000 is recommended. CLI/JSON includes think time, seed, message size, graceful-close ratio, and the T17 schema
+- Move `L5-C-11` to Day 84 morning and spread `L5-C-12` across Day 84 afternoon/Day 85 morning. Read fluentd Chapters 1-2; use the rest as reference. Only unauthenticated timeout and per-IP limit are required on Day 95
+- Rebudget 5-1/5-4/5-6 as 14h/32h/10h and reserve a weekly half-day buffer. Keep 5-3 as **removed deployment assignment (number reserved)**
+- `SECURITY-CHECK.md` covers token expiry/replay, packet userId distrust/session binding, SQL parameters, password hashing, secrets, and TLS. Add 30 minutes for environment config plus port/serverId separation
+- Performance reports include per-connection CPU/memory and one-host capacity, three hypotheses with one rejected, Release+PDB, raw data, and commit hash
+
+### 11.4 AI, interview, and troubleshooting checks
+
+- Verify PromQL `sum by(le)`, rate windows ≥2× scrape, and counter resets. Do not copy Docker/Linux `tc`/`iptables`, Polly v7 APIs, or missing-package `KestrelMetricServer` suggestions
+- Add questions on load models, same-host distortion, TIME_WAIT, SLO/alerts, request IDs, safe shutdown, leak vs GC, retry idempotency, and capacity. Add troubleshooting for 10048/10055, histogram NaN, undelivered firing alerts, datasource UID, PDB symbols, huge traces, keep-alive firewall behavior, and flaky clocks

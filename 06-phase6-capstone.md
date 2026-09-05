@@ -99,7 +99,7 @@ portfolio/
 
 ---
 
-## 2. Weekly Detailed Plan (by day)
+## 2. Weekly Detailed Plan (Day by Day)
 
 ### 2.1 Week 21 — Deciding Scope and Building the Foundation
 
@@ -172,8 +172,8 @@ portfolio/
 | Game results | DB | No | Ranking, match history |
 
 **Afternoon (2.5h)**
-- `L6-C-05` Organize shared libraries: gather PacketLib (2-2), Rules (3-1), Pool (1-2), Resilience (5-4) into `Shared/`, tag a version (`v1.0`)
-- Clean up project references, remove circular references
+- `L6-C-05` Organize shared libraries and process skeletons: gather PacketLib, Rules, Pool, Resilience into `Shared/`; create API, Match, and Game skeletons plus two game-instance configs/PID files
+- Clean project references, remove cycles, tag `v1.0`
 
 **1 Hour Without AI**
 - On the state placement table, mark "what disappears if the game server dies" and write down the impact
@@ -188,11 +188,11 @@ portfolio/
 - `L6-C-06` Write the execution script
   ```powershell
   # scripts/start-all.ps1 (outline)
-  Start-Process dotnet -ArgumentList "run --project src/ApiServer   -- --port 8080"
-  Start-Process dotnet -ArgumentList "run --project src/MatchServer -- --port 8090"
-  Start-Process dotnet -ArgumentList "run --project src/GameServer  -- --port 9001 --server-id game-1"
-  Start-Process dotnet -ArgumentList "run --project src/GameServer  -- --port 9002 --server-id game-2"
-  Start-Process dotnet -ArgumentList "run --project src/BatchWorker"
+  # Build Release once, run DLLs/executables directly, and record PID files.
+  Start-Process dotnet -ArgumentList "artifacts/ApiServer.dll --port 8080" -PassThru
+  Start-Process dotnet -ArgumentList "artifacts/MatchServer.dll --port 8090" -PassThru
+  Start-Process dotnet -ArgumentList "artifacts/GameServer.dll --port 9001 --server-id game-1" -PassThru
+  Start-Process dotnet -ArgumentList "artifacts/GameServer.dll --port 9002 --server-id game-2" -PassThru
   ```
   Also include a shutdown script and a health check (smoke-test)
 - Separate config: server ID, port, and metrics port via arguments or environment variables
@@ -618,9 +618,9 @@ portfolio/
 
 ---
 
-## 3. Exercise Catalog
+## 3. Lab Catalog
 
-### 3.1 Capstone Exercises (L6-C)
+### 3.1 Capstone Labs (L6-C)
 
 #### L6-C-01 Write the Scope Table (60 min) 🔴
 - **Steps**: Features as rows, columns for `Required/Optional/Excluded · estimated time · rationale`. If the sum of estimated time exceeds 70% of available time, cut something
@@ -638,9 +638,9 @@ portfolio/
 - **Steps**: Key structure (`server:{id}`), fields (connection count, room count, version, metrics port), 5s interval·15s TTL, handling of update failures
 - **Acceptance criteria**: Calculation justifying TTL ≥ interval × 3
 
-#### L6-C-05 Organize Shared Libraries (90 min) 🔴
-- **Steps**: Move PacketLib, Rules, Pool, Resilience into `Shared/`, remove circular references, version tag
-- **Acceptance criteria**: All four servers build while referencing `Shared/`
+#### L6-C-05 Shared Libraries and Four-Process Skeleton (120 min) 🔴
+- **Steps**: organize `Shared/`, remove cycles, create API/Match/Game skeletons plus two game-instance config/PID files, add version tag
+- **Acceptance criteria**: API, matcher, and two game instances build Release while referencing `Shared/`
 
 #### L6-C-06 Execution Scripts (75 min) 🔴
 - **Steps**: `start-all.ps1` (port/server-ID arguments), `stop-all.ps1`, `smoke-test.ps1` (4 health checks)
@@ -809,7 +809,7 @@ portfolio/
 
 ---
 
-## 5. Textbook Usage Guide (Phase 6)
+## 5. Textbook Guide (Phase 6)
 
 ### 5.1 Common
 
@@ -846,7 +846,7 @@ portfolio/
 
 ---
 
-## 6. AI Collaboration Guide (Phase 6 Specific)
+## 6. AI Collaboration Guide (Phase 6)
 
 ### 6.1 Prompts
 
@@ -941,11 +941,11 @@ No committing code I can't explain / 1 hour without AI every day / generated cod
 
 **Configuration requirements**
 
-1. **Server configuration**: 1 API server (extended from 4-1) + 1 matching server + 2+ game servers (same binary, different port/ID) + 1 batch worker. **All run simultaneously as separate processes on the local PC** (no Windows service registration)
+1. **Server configuration**: 1 API server + 1 matching server + 2+ game servers (same binary, different port/ID), all as separate local processes. The batch worker is optional (🟡) and runs only one season-end snapshot job
 2. **Flow**: client → API login (token) → connect to matching server (token verification) → matching request → select game server, **issue ticket**, notify address → connect to game server (ticket verification) → play → result → game server saves to API (retry queue) → update ranking → return to lobby, re-match
 3. **Server-state sharing**: game server sends a Redis heartbeat every 5 seconds (connection count, room count, version, TTL 15s). The matching server selects the **server with fewest rooms** among those with a valid heartbeat, and rechecks right before assignment
 4. **Server-down handling**: when one game server is force-killed, the matching server **excludes it within 15 seconds**; that server's users detect the client disconnection, return to the lobby → **re-match successfully**; the in-progress game is recorded as "voided"
-5. **Game content (pick one)**: (a) Gomoku + spectating + room chat + seasonal ranking + match history (b) 2D action for 4 players (extending 3-3b) (c) a new simple game (pre-approved)
+5. **Game content (pick one)**: (a) Gomoku + seasonal ranking + match history (spectating and room chat 🟡) (b) 2D action for 4 players (c) a new simple game (pre-approved)
 6. **Observability**: add **per-server and matching-server panels** to the Phase 5 dashboard, 3+ alerts (connect p99 / match time / heartbeat loss)
 7. **Execution automation**: `start-all.ps1` (starts all 4), `stop-all.ps1`, `smoke-test.ps1` (full health check after startup)
 
@@ -953,9 +953,9 @@ No committing code I can't explain / 1 hour without AI every day / generated cod
 
 | Item | Criterion |
 |---|---|
-| Load | **1,000+ concurrent connections, 200+ rooms**, ramp-up 20 users/sec, 10-minute pass |
-| Latency | Record connect p99, match p99, login p99 (connect p99 stays at Phase 5 levels) |
-| Server-down | Force-kill scenario for 1 game server passes 5 times, recovery time recorded |
+| Load | default **1,000 connections/200 rooms**; official reduced path **500/100**; ramp-up 20/sec, 10 minutes |
+| Latency | record connect/match/login p99; connect p99 ≤ Phase 5×1.2 |
+| Server-down | five force-kill runs; process stop→successful rematch ≤30 seconds |
 | Result reliability | 0 loss, 0 duplicates for results even with a 60-second API outage |
 | Testing | Unit/integration tests pass (rules, logic, API, matching queue), all runnable via local scripts |
 | Runbook | 5 failure entries, verified through real use |
@@ -985,7 +985,7 @@ No committing code I can't explain / 1 hour without AI every day / generated cod
 
 | Point | What should be working |
 |---|---|
-| End of week 21 | All 4 processes start via script, smoke test passes |
+| End of week 21 | API, matcher, and two game servers start via script; smoke test passes |
 | End of week 22 | Login → matching → ticket → play on one of 2 game servers |
 | End of week 23 | Server-down and matching-server-down scenarios pass, content complete |
 | End of week 24 | 1,000-connection test passes, all 6 documents complete |
@@ -1074,7 +1074,7 @@ Provided tests
 - **30-minute presentation**: average 4.0+ on a 5-point scale. Explain the whole configuration with a single diagram, and defend the 3 key decisions with rationale
 - **60-minute mock interview**: last round averages 4.0+
 
-### 8.4 Final Explanation-Test Question Bank
+### 8.4 Final Oral Exam Question Bank
 
 1. Draw the whole configuration as a single diagram and explain the data flow from login to result storage
 2. What would need to change if you scaled to 10 game servers? What if the matching server became the bottleneck?
@@ -1151,3 +1151,39 @@ Provided tests
 - If you did it again, which Phase would you spend more time on, and where would you cut back?
 - How has your way of using AI changed (early on vs. now)?
 - What could you contribute in your first week if you started a job right now?
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Scope and architecture contract
+
+- Required processes are one API, one matcher, and two game servers. The **batch worker is optional (🟡)** and runs only one season-end snapshot job. Build the four required skeletons/config/PID files in `L6-C-05` on Day 104, then launch them on Day 105
+- Required content is match history plus seasonal ranking; spectating and room chat are optional. The official reduced path is 500 connections/100 rooms on recommended 8-core/16GB hardware, with environment recorded
+- Day 103 reserves half a day to define matcher↔client, game→API result, assignment notification, and internal API authentication in `PROTOCOL.md`/`API.md`. Prefix Redis keys with `{course}:{env}:{service}:`
+- Specify matcher-client transport and embedded protocol version. In-progress reconnect is an optional design including ticket TTL, generation, and join timeout
+- Add Redis Streams to the inter-server comparison and state Pub/Sub's non-durability. Record why no gateway/relay is used. A mixed path may use C++ game servers with C# API, matcher, and batch
+
+### 11.2 Schedule and automated validation
+
+#### L6-C-10b Extend the Load Tool Through Matching (120 min) 🔴
+- **Steps**: add an async state machine for API login → matcher request → ticket → game connect → play → rematch
+- **Acceptance criteria**: fixed-seed 500-connection JSON with per-stage success/failure, p99, and close reasons
+
+- Replace Day 108 morning with `L6-C-10b Extend 5-1 tool for matching flow` (120 min), shifting following labs one day. Spread five faults across Days 117-118 and write only one half-day blog post on Day 123
+- `L6-C-14` automates process stop→detection→successful rematch and prints elapsed time. Require recovery ≤30s, move p99 ≤ Phase 5×1.2, and ten automated quality-gate tests
+- Build once before launching; `start-all.ps1` runs `dotnet <dll>`/executables directly and records PIDs. `stop-all.ps1` verifies PID death and port release; do not nest background `dotnet run`
+- Rebudget Phase 6 as capstone 152h, portfolio 24h, presentation 24h, applications 16h, coding/interview 24h. Keep the no-AI hour on Days 121-124 and 126-128
+- Project-start DoD includes committed `CLAUDE.md` T3/T3'. Write ADR-0013 for recovery and ADR-0014 for result-queue durability on their decision days
+
+### 11.3 Hiring preparation and repository hygiene
+
+- Add §8.4-b with 30 questions: networking10, OS8, DB7, language5, plus five behavioral questions. Use the 60-minute T9-b rubric; withhold answers during scoring and output unknown-question list
+- From Week 21, use two no-AI hours per week for algorithms, reaching 32 problems including the original eight. Day 125 spends 60 minutes analyzing three target companies, stacks, motivation, and collaboration/failure stories
+- 6-2 checks `.gitignore`, secret history, personal data, commit messages, license, and README AI disclosure. Slides include ten expected Q&As; the demo has one caption in each of four segments
+
+### 11.4 AI and operations traps
+
+- Challenge AI suggestions for `GET`+`DEL` tickets, Redis `KEYS`, Pub/Sub as reliable delivery, heartbeat TTL equal to interval, or background `Start-Process dotnet run`. Use Lua when Redis <6.2 lacks `GETDEL`
+- Add troubleshooting for build locks, lingering PIDs/ports, Redis connection explosion, duplicate queueing, unclaimed ticket slots, missing server_id labels, stale tickets after matcher restart, and season-snapshot ordering
+- Prerequisites are an extensible 5-1 client, internal API auth, traceId logs, Release+PDB, Redis 6.2+ or Lua, and recommended 8 cores/16GB

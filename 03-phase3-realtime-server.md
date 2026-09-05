@@ -551,9 +551,9 @@ Day numbers are based on the entire course (Phase 3 spans days 36-55).
   {
       private readonly Channel<IJob> _jobs =
           Channel.CreateBounded<IJob>(new BoundedChannelOptions(1024)
-          { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
+          { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
 
-      public bool Post(IJob job) => _jobs.Writer.TryWrite(job);   // apply policy on failure
+      public bool Post(IJob job) => _jobs.Writer.TryWrite(job);   // false when full; caller applies policy
 
       public async Task RunAsync(CancellationToken ct)            // one loop per room
       {
@@ -598,7 +598,7 @@ Day numbers are based on the entire course (Phase 3 spans days 36-55).
 
 ---
 
-## 4. Learning Item Details
+## 4. Learning Items in Detail
 
 ### 4.1 Common (90h)
 
@@ -684,7 +684,7 @@ Day numbers are based on the entire course (Phase 3 spans days 36-55).
 
 ---
 
-## 5. Book Usage Guide (Phase 3)
+## 5. Textbook Guide (Phase 3)
 
 ### 5.1 Common
 
@@ -715,14 +715,14 @@ Day numbers are based on the entire course (Phase 3 spans days 36-55).
 | Modern Win32 API Programming for Game Server Developers | Ch.2 (Reread Memory Pools), Ch.4 (Thread Priority, Affinity) | Days 51-52 | Experiment with logic worker affinity/priority and measure the effect (if there's no effect, that's also a conclusion) |
 | Building an Online Game Server with C++ Boost.Asio 🟡 | Ch.11 (Chat), Ch.12 (Strand), Ch.13 (Timer), Ch.17 (Extension Design) | Day 54 | Strand corresponds to the room actor's serialization guarantee. For comparison only — do not switch tracks |
 
-### 5.4 Secondary Track Reading Assignment
+### 5.4 Secondary-Track Reading
 
 - C# main track: Modern Windows Multithreading Ch.11 → 1 page on "the difference in thread composition between a native IOCP server and a .NET server"
 - C++ main track: Building a C# async/await Library Ch.16 → 1 page on "what is needed to port the Channel actor to C++"
 
 ---
 
-## 6. AI Collaboration Guide (Phase 3 Specific)
+## 6. AI Collaboration Guide (Phase 3)
 
 ### 6.1 Prompts
 
@@ -1005,7 +1005,7 @@ Provided Tests
 
 **Pass criteria**: pass all 4 within 120 minutes.
 
-### 8.3 Explanation Exam Question Bank (10 Random Questions, Average 4.0)
+### 8.3 Oral Exam Question Bank (10 Random Questions, Average 4.0)
 
 1. The pros and cons of the 4 thread models. What would you choose for an Omok server versus an MMO zone server?
 2. Why process a room on a single thread. What do you do when one room becomes heavy?
@@ -1061,7 +1061,7 @@ Room logic: 2 race conditions / 1 timer leak / 1 reconnection state bug / 1 auth
 
 ---
 
-## 10. Preparation Before Moving to Phase 4
+## 10. Preparing for Phase 4
 
 - [ ] SQLite requires no separate installation (the default DB). 🟡 If you chose MySQL, confirm that MySQL 8 starts as a Windows service
 - [ ] Confirm Redis (redis-windows) starts and `redis-cli ping` → `PONG`
@@ -1072,3 +1072,33 @@ Room logic: 2 race conditions / 1 timer leak / 1 reconnection state bug / 1 auth
   ```
 - [ ] Prepare to handle the user identifier as a **userId (integer)** instead of a nickname (in preparation for Phase 4 authentication integration)
 - [ ] Phase 3 retrospective: the biggest reason design and implementation diverged, a moment you were tempted to violate the actor principle, one case where AI was wrong
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Required architecture rules
+
+#### L3-C-03b Fixed-Tick Loop and Drift (60 min) 🔴
+- **Steps**: implement monotonic clock, accumulator, catch-up cap, and over-budget counter; measure ten-minute drift
+- **Acceptance criteria**: injected stalls do not spiral; report ticks, drift, and over-budget count
+
+- Day 38 adds a required 60-minute fixed-timestep loop with accumulator, catch-up cap, spiral-of-death counter, and drift measurement even if Omok gameplay stays event-driven
+- Room A→B never waits synchronously; B posts a continuation Job back to A. Implement game-end→lobby notification as a real cross-room message
+- Login returns a 16-byte `reconnectToken`; `ReconnectReq{name,roomId,reconnectToken}` rejects another user's name or a bad token. Duplicate names reject the new login and stay separate from reconnect
+- Pause the turn timer while disconnected; the player loses when the 60-second grace expires. Add `Spectating` and `Lobby→Spectating→Lobby`
+- Define `Ping/Pong(clientTs)` and `Heartbeat/HeartbeatAck` in the 5000 range. Timeout decisions use only the server monotonic clock; record RTT p50/p99
+- Reject stale `turnSeq`; fix `boardHash` as FNV-1a 64 over 225 board bytes, next turn, and turnSeq. Count one rate violation per one-second window and close after three windows
+
+### 11.2 Schedule and evaluation
+
+- Limit Day 39 to two diagrams and Day 40 to six core design items; split gameplay flow from Day 44 onward and move overload from Days 43/46/48/55 to half-day buffers
+- Rebudget 3-C/3-1/3-2 as 12h/58h/12h. Require 70/100 for 3-C and 3-1 with full structure points
+- Fix the logic suite at 41 tests: transitions 10, illegal 5, matching 8, cheats 6, reconnect 7, spectating 5. Add `PlaceResult` enum↔wire `uint16` mapping
+- The 100-room/300-connection target assumes 8 cores/16GB; otherwise use 50 rooms and record the environment. ASan detects UAF; lifecycle counters judge C++ leaks
+- Day 41 DoD includes committed `CLAUDE.md` T3/T3'. The no-AI hour reimplements that day's room/timer/state code from an empty file
+
+### 11.3 Additional validation
+
+- Add per-packet token buckets, UTF-8/control-character and byte/character chat validation, plus a `replay` scenario that replays moves+seed and matches boardHash
+- Add questions on fixed timestep, server clocks, cross-room deadlock, token reconnect, and queue saturation. Require failing tests before accepting `DropWrite+TryWrite`, nickname-only reconnect, or synchronous cross-room calls

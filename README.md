@@ -1,216 +1,146 @@
-# 신입 온라인 게임 서버 개발자 양성 과정 — 6개월 AI 동반 독학 커리큘럼 (총론)
-  
-> 버전: 0.3  
-> 대상: C#/C++ 기초 문법을 아는 상태에서 온라인 게임 서버 개발자로 취업·실무 진입을 목표로 하는 학습자  
-> 기간: 6개월(26주), 주 5일, 하루 8시간 = 약 1,040시간  
-> 전제: 학습자는 혼자 학습하며, 챗 AI(개념 학습·질의)와 코딩 에이전트(Claude Code 등, 구현·리뷰)를 항상 옆에 두고 학습한다  
-> 환경: **Windows 기준**. 소켓 서버는 Windows(Winsock/IOCP, .NET on Windows)에서 개발·실행하고, **Docker는 사용하지 않는다**. DB는 DI로 추상화해 개발 중에는 SQLite를 기본으로 쓰고(설치 불필요, 개발 편의성), 선택적으로 MySQL을 쓴다. Redis(redis-windows)·Prometheus·Grafana도 Windows에 직접 설치한다   
-  
-## 문서 구성
+# Entry-Level Online Game Server Developer Curriculum
 
-| 문서 | 내용 |
+> 🇰🇷 Korean version: [README_kr.md](README_kr.md)
+>
+> Version 0.4 (2026-09-05 review integrated)
+> Audience: learners who know basic C# or C++ and want to enter online-game server development
+> Duration: 26 weeks, five 8-hour days per week, approximately 1,040 hours
+> Platform: Windows 11, Visual Studio 2026, .NET 10, local scripts, no Docker or CI
+
+This self-study curriculum centers on implementation, measurement, explanation, and deliberate AI use. AI may teach, review, generate exercises, and pair-program; the learner must design first, verify every claim, and reimplement core work without AI.
+
+## Documents
+
+| English (default) | Korean | Scope |
+|---|---|---|
+| `README.md` | `README_kr.md` | course goals, tracks, policy, roadmap, validation |
+| `01-phase1-language-tools.md` | `01-phase1-language-tools_kr.md` | Phase 1: language and tooling |
+| `02-phase2-network.md` | `02-phase2-network_kr.md` | Phase 2: networking |
+| `03-phase3-realtime-server.md` | `03-phase3-realtime-server_kr.md` | Phase 3: real-time architecture |
+| `04-phase4-data-api.md` | `04-phase4-data-api_kr.md` | Phase 4: data and API servers |
+| `05-phase5-operations.md` | `05-phase5-operations_kr.md` | Phase 5: performance, observability, security |
+| `06-phase6-capstone.md` | `06-phase6-capstone_kr.md` | Phase 6: capstone and hiring preparation |
+| `07-books-guide.md` | `07-books-guide_kr.md` | textbook modes and reading budget |
+| `08-templates.md` | `08-templates_kr.md` | notes, design, ADR, reports, runbooks, portfolio |
+
+Each Phase follows: usage → goals and prerequisites → day-by-day plan → Lab Catalog → Learning Items in Detail → Textbook Guide → AI collaboration → assignments → completion assessment and Oral exam → troubleshooting → preparation for the next Phase. Korean is the source for curriculum changes; update English in the same commit while preserving heading hierarchy, tables, code fences, and links.
+
+## 0. Outcomes and Tracks
+
+After six months, a learner should be able to:
+
+- implement a Windows TCP game server in the chosen language and keep it stable under hundreds to roughly one thousand local connections
+- build an account/lobby/asset API with SQLite by default, optional MySQL, and Redis
+- prove improvements with load tests, profiles, logs, metrics, and reproducible reports
+- inject and recover from failures using timeouts, retries, circuit breakers, idempotency, and runbooks
+- explain architecture, tradeoffs, and measured limits in reviews and technical interviews
+
+Choose one primary track in Week 1. C# emphasizes service tooling, APIs, and production speed; C++ emphasizes IOCP, ownership, memory, and low-level performance. A secondary track is limited to four reading hours per week. Doing both full tracks extends the course to eight or nine months. A mixed path—C++ game server plus C# API/matcher/batch—is explicitly supported.
+
+| Phase | Weeks | Hours | Common | Track |
+|---|---:|---:|---:|---:|
+| 1. Language and tools | 1-3 | 120 | 40 | 80 |
+| 2. Networking | 4-7 | 160 | 70 | 90 |
+| 3. Real-time architecture | 8-11 | 160 | 90 | 70 |
+| 4. Data and API | 12-15 | 160 | 100 | 60 |
+| 5. Operational quality | 16-20 | 200 | 140 | 60 |
+| 6. Capstone and hiring | 21-26 | 240 | 130 | 110 |
+| **Total** | **26** | **1,040** | **570** | **470** |
+
+## 1. Environment
+
+| Area | Standard |
 |---|---|
-| `00-overview.md` (이 문서) | 과정 목표, 트랙 구조, AI 학습 원칙, 로드맵, 검증 체계, 환경 |
-| `01-phase1-language-tools.md` | Phase 1 (1~3주) 언어·도구 심화 |
-| `02-phase2-network.md` | Phase 2 (4~7주) 네트워크 프로그래밍 기초 |
-| `03-phase3-realtime-server.md` | Phase 3 (8~11주) 실시간 게임 서버 아키텍처 |
-| `04-phase4-data-api.md` | Phase 4 (12~15주) 데이터·API 서버 |
-| `05-phase5-operations.md` | Phase 5 (16~20주) 운영 품질: 성능·관측·보안 |
-| `06-phase6-capstone.md` | Phase 6 (21~26주) 캡스톤·취업 준비 |
-| `07-books-guide.md` | 교재 활용 가이드 — `jacking75/programming-books-with-ai` 저장소의 책을 언제·무엇을·어떻게 볼지 |
-| `08-templates.md` | 학습 노트·주간 회고·CLAUDE.md·설계 문서·ADR·리포트·런북 템플릿 |
+| OS/IDE | Windows 11 (10 acceptable), Visual Studio 2026 Community, VS Code |
+| C# | .NET 10 SDK pinned by `global.json` |
+| C++ | MSVC C++20/23, CMake 3.28+, vcpkg manifest mode |
+| Tests | xUnit or GoogleTest; local `scripts/build-and-test.ps1` |
+| Data | SQLite default; optional MySQL 8 through Repository+DI; redis-windows 6.2+ or Lua fallback |
+| Observability | Prometheus, Grafana, windows_exporter, Alertmanager/Grafana Alerting |
+| Logging | Serilog for C#, spdlog for C++ |
+| AI | any coding agent/chat AI; Claude Code and Codex CLI are examples, not requirements |
 
-각 Phase 문서는 **개요 → 주차별 계획 → 학습 항목 상세(공통/C#/C++) → 교재 활용 → AI 협업 가이드 → 과제 명세 → 학습 완료 판정 → 흔한 막힘 포인트** 순서로 되어 있다.
+## 2. AI Learning Contract
 
----
+1. Do not commit code you cannot explain.
+2. Attempt the problem for 15-20 minutes before asking.
+3. Spend one hour every day reimplementing core code or solving scheduled algorithms without AI.
+4. Verify AI against official documentation and executable tests; record errors.
+5. Create a project instruction file from T3/T3' for every assignment.
+6. Keep one daily Markdown note with learning, confusion, AI errors, time use, and next steps.
 
-## 0. 과정 목표와 트랙 구조
+Daily routine: review/quiz 30m, concepts 2h, implementation 2.5h, no-AI work 1h, review/refactor 40m, notes 20m, with breaks. Friday afternoon is a four-hour checkpoint: 60-120m no-AI reimplementation, a 60m Oral exam, code review/fixes, and retrospective. Every Phase reserves a half-day weekly buffer before expanding scope.
 
-### 0.1 과정 종료 시 도달 목표
+## 3. Roadmap
 
-6개월 후 학습자는 다음을 할 수 있어야 한다.
-
-- 선택한 언어로 TCP 기반 실시간 게임 서버를 Windows에서 설계·구현하고, 수백~천 단위 동시 접속 부하에서 안정적으로 동작시킨다
-- 계정·로비·자산을 다루는 데이터 API 서버와 DB(SQLite/MySQL)·Redis 설계를 직접 한다
-- 부하 테스트·프로파일링·로그·메트릭으로 서버를 측정하고 수치로 개선을 증명한다
-- 서버의 장애를 재현·대응하고, 재시도·서킷 브레이커 같은 복원력 패턴을 적용한다
-- AI를 "대신 짜주는 도구"가 아니라 "설명·리뷰·출제·페어 프로그래밍 파트너"로 쓰는 습관을 갖춘다
-- 만든 서버를 코드·문서·발표로 설명한다 (포트폴리오 + 기술 면접)
-
-### 0.2 트랙 선택 규칙
-
-과정은 **공통 영역**과 **언어 트랙(C# 또는 C++)**으로 나뉜다.
-
-| 구분 | 내용 | 비중 |
-|---|---|---|
-| 공통 | 네트워크·OS·DB·아키텍처 개념, 설계·문서화, 테스트, 운영(관측·장애 대응), AI 활용법, 검증 체계 | 약 55% |
-| 트랙 | 언어 심화, 런타임/메모리 모델, 네트워크 API, 프레임워크·라이브러리, 프로파일링 도구, 트랙별 과제 구현 | 약 45% |
-
-- 학습자는 **1주차 안에 주 트랙을 하나 선택**한다. 기준은 (1) 목표 회사군의 기술 스택, (2) 본인 선호, (3) 기존 숙련도다.
-- 선택 가이드: 라이브 서비스 운영 툴·API 서버·빠른 생산성 비중이 크면 C#, 대규모 MMO 실시간 서버·성능 극한·레거시 엔진 연동 비중이 크면 C++가 유리하다. 국내 채용 공고 기준으로 두 언어 모두 수요가 있다.
-- **두 트랙 병행**은 허용하나 권장 방식은 다음 둘 중 하나다.
-  - 방식 A(권장): 주 트랙 100% 이행 + 부 트랙은 각 Phase의 "부 트랙 읽기 과제"만 수행(주당 4시간 이내)
-  - 방식 B: 두 트랙 과제 모두 수행 → 과정을 8~9개월로 연장하거나 Phase 6 캡스톤 범위를 축소한다
-- Phase 4(데이터·API 서버)는 **혼합 선택**을 허용한다. 실무에서 "C++ 게임 서버 + C# API 서버" 조합이 흔하므로, C++ 트랙 학습자가 Phase 4만 C#으로 하는 것은 정식 경로로 인정한다.
-
-### 0.3 시간 배분
-
-| Phase | 주차 | 시간 | 공통 | 트랙 |
+| Phase | Common Focus | C# | C++ | Main Deliverable |
 |---|---|---|---|---|
-| 1. 언어·도구 심화 | 1~3 | 120h | 40h | 80h |
-| 2. 네트워크 프로그래밍 | 4~7 | 160h | 70h | 90h |
-| 3. 실시간 게임 서버 아키텍처 | 8~11 | 160h | 90h | 70h |
-| 4. 데이터·API 서버 | 12~15 | 160h | 100h | 60h |
-| 5. 운영 품질(성능·관측·보안) | 16~20 | 200h | 140h | 60h |
-| 6. 캡스톤·취업 준비 | 21~26 | 240h | 130h | 110h |
-| 합계 | 26주 | 1,040h | 570h | 470h |
+| 1 | Git, tests, debugging, memory/concurrency, benchmarking | async internals, GC, Span/ArrayPool, Channel | RAII, atomics, Win32 synchronization, ASan/CRT heap | log queue, object pool, reports |
+| 2 | TCP semantics, framing, serialization, sessions | Socket/SAEA, Pipelines, MemoryPack, SuperSocketLite comparison | Winsock, select, overlapped I/O, IOCP | chat server, packet library, load client |
+| 3 | room actor, fixed tick, authority, reconnect | Channel actors, timers, Serilog | room jobs, worker assignment, pools, spdlog | multi-room Omok server |
+| 4 | HTTP, auth, SQLite/MySQL, Redis, transactions | ASP.NET Core, Repository+DI, Dapper | cpp-httplib/Drogon, sqlite3, redis-plus-plus | account/lobby/mail/shop API |
+| 5 | load validity, profiles, SLI/SLO, alerts, resilience, security | dotnet-counters/trace, PerfView | VS Profiler, ETW/WPA, CRT/ASan boundaries | load tool, performance report, runbook |
+| 6 | contracts, matching, scale-out, E2E, portfolio, interviews | integrated or mixed path | integrated or mixed path | capstone, demo, portfolio, mock interview |
 
----
+## 4. Textbook Map
 
-## 1. 학습 환경 (Windows, Docker 미사용)
+Books come from `jacking75/programming-books-with-ai`; [the full guide](07-books-guide.md) is authoritative. Load only designated chapter files into AI context.
 
-| 구분 | 도구 | 비고 |
+| Phase | Required Reading Shape |
+|---|---|
+| 1 | Async/Await core, Modern C++, Windows multithreading/Win32 memory, memory model |
+| 2 | networking foundations; C# Socket Ch.1-7,9,10 or TCP/IP Windows Socket Ch.1-6,8-11,13 |
+| 3 | actor/state/game-loop chapters, Omok reference, matching Ch.1/3 |
+| 4 | API/DB/Redis core, API lab appendices, consistency-focused gacha chapters |
+| 5 | Prometheus; fluentd Ch.1-2 read-through and remaining chapters as reference; profiling books |
+| 6 | matching Ch.4-7 and 2D MMORPG as reference architecture |
+
+## 5. Validation
+
+| Item | Method | Pass Condition |
 |---|---|---|
-| OS | Windows 11 (10도 가능) | 서버·클라이언트·DB 모두 로컬 Windows에서 실행 |
-| IDE | Visual Studio 2026 Community 이상 (C#: .NET 워크로드, C++: "C++를 사용한 데스크톱 개발" 워크로드), VS Code | C++ 트랙은 vcpkg, CMake 포함 |
-| .NET | .NET 10 SDK | `dotnet --list-sdks`로 확인 |
-| 터미널 | Windows Terminal + PowerShell 7 | 스크립트는 PowerShell 기준 |
-| Git | Git for Windows + GitHub 계정 | 이 과정은 CI를 사용하지 않는다. 로컬에서 직접 빌드·테스트한다 |
-| DB | SQLite(기본, NuGet 패키지로 사용, 별도 설치 불필요) + 선택적으로 MySQL 8.0(Windows Installer + Workbench) | DI로 DB 접근을 추상화해 SQLite↔MySQL을 교체 가능하게 만든다. 개발 편의성을 위해 SQLite를 기본으로 쓴다 |
-| Redis | redis-windows(https://github.com/redis-windows/redis-windows) | Windows를 지원하는 Redis 네이티브 빌드. Docker는 쓰지 않으므로 이것을 쓴다 |
-| 관측 | Prometheus, Grafana, windows_exporter Windows 바이너리 | 교재(프로메테우스 책)가 Windows 설치 기준 |
-| 로그 | Serilog(C#), spdlog(C++), 선택적으로 fluent-package(Windows) | |
-| AI | 코딩 에이전트(Claude Code 등) + 챗 AI(Claude/ChatGPT 등) | 특정 코딩 에이전트를 필수로 하지 않는다. Claude Code를 기본 예시로 쓰되 Codex-Cli 등 다른 에이전트도 가능하다. 교재 저장소의 OpenCode 가이드로 에이전트 개념을 보조 학습 |
+| Assignment | required checklist plus correctness/performance logs | all mandatory items complete |
+| Reimplementation | empty project, 60-120 minutes, no AI | supplied tests pass |
+| Oral exam | 60-minute AI interviewer using T9/T9-b | average at least 4.0/5 |
+| Defect finding | injected code with five defects | at least four found |
+| Documentation | design, README, ADR, reports | another developer reproduces in ten minutes |
 
----
+Phase 3 and 5 may extend by at most one week if the core gate fails. Missing work receives eight hours in the next Phase's first week. Capstone targets may be reduced only through the documented 500-connection/100-room path, never by silently lowering correctness gates.
 
-## 2. AI와 함께 배우는 방식 (전 과정 공통 운영 원칙)
+## 6. Ports and Processes
 
-AI 사용을 금지하지 않고 적극 사용하되, **AI가 학습을 대체하지 못하도록 규칙을 둔다.** 핵심은 "AI가 만든 것을 내가 설명할 수 있는가"다.
-
-### 2.1 AI의 4가지 역할
-
-| 역할 | 주 도구 | 언제 | 규칙 |
-|---|---|---|---|
-| 튜터(설명자) | 챗 AI | 새 개념 학습 | "왜"를 3번 이상 되묻고, 비유·그림·예제 코드를 요구한다. 공식 문서와 대조한다 |
-| 페어 프로그래머 | 코딩 에이전트 | 과제 구현 | 설계는 내가 먼저 쓴다. AI는 초안·보일러플레이트·대안 제시. 생성 코드는 줄 단위로 읽고 이해 못 하면 질문한다 |
-| 리뷰어 | 코딩 에이전트/챗 AI | 기능 하나 완료 시 | §5.3 루브릭으로 리뷰 요청. 지적 사항은 직접 고친다 |
-| 출제자·면접관 | 챗 AI | 매일 마무리, 주간·Phase 말 | 배운 범위를 주고 퀴즈·구두 설명·코드 결함 찾기 문제를 만들게 한다 |
-
-### 2.2 반드시 지키는 6가지 규칙
-
-1. **설명 못 하는 코드는 커밋하지 않는다.** 코딩 에이전트가 만든 코드는 커밋 전 "왜 이렇게 동작하는지"를 자기 말로 주석 또는 노트에 적는다.
-2. **먼저 내가 시도한 뒤 묻는다.** 최소 15~20분 스스로 시도한 흔적(코드/메모)을 남긴 뒤 질문한다.
-3. **매일 "AI 없는 1시간"을 둔다.** 그날 배운 핵심을 AI 없이 빈 파일에서 재구현한다.
-4. **AI의 답을 검증한다.** 공식 문서(learn.microsoft.com, cppreference, RFC 등)와 대조하거나 실행해서 확인하고, 틀린 점은 학습 노트에 기록한다.
-5. **과제마다 CLAUDE.md(에이전트 지침 파일)를 직접 쓴다.** 프로젝트 구조, 코딩 규칙, "코드 생성 시 설명을 함께 달 것" 같은 학습용 지시를 포함한다. 이 파일을 쓰는 것 자체가 설계 훈련이다.
-6. **학습 노트를 남긴다.** 하루 1개 마크다운(배운 것 / 몰랐던 것 / AI가 틀린 것 / 내일 할 것).
-
-### 2.3 교재를 AI와 함께 읽는 법
-
-이 과정의 교재(`07-books-guide.md`)는 대부분 AI가 생성하고 사람이 편집한 책이며, 저장소 README에 "예제 코드에 오류가 있을 수 있으니 AI의 도움을 받기 바란다"고 명시되어 있다. 이 특성을 학습 장치로 활용한다.
-
-- 책의 마크다운 파일을 Claude Code 작업 폴더에 두고 "이 장의 핵심을 내가 설명할 테니 틀린 곳을 지적해 달라"는 식으로 읽는다
-- 예제 코드는 **반드시 직접 빌드**한다. 빌드 오류가 나면 그것이 첫 번째 디버깅 과제다. 고친 내용은 학습 노트에 기록한다
-- 책의 설명과 공식 문서가 다르면 공식 문서를 따르고, 차이를 노트에 남긴다
-- 책을 처음부터 끝까지 읽지 않는다. 각 Phase 문서의 "교재 활용" 절에 적힌 장만 그 시점에 읽는다
-
-### 2.4 하루 8시간 표준 루틴
-
-| 시간 | 활동 | AI 사용 |
+| Phase | Process/Purpose | Default Port |
 |---|---|---|
-| 0:00~0:30 | 어제 복습, 오늘 목표 | AI 출제 퀴즈 5문제 풀기 |
-| 0:30~2:30 | 개념 학습(교재 → 공식 문서 순) | 튜터 모드. "내가 설명 → AI가 지적" 방식 |
-| 2:30~2:45 | 휴식 | |
-| 2:45~5:15 | 과제 구현 | 페어 모드. 설계 → 직접 구현 → 막히면 질문 → 리뷰 |
-| 5:15~6:00 | 점심/휴식 | |
-| 6:00~7:00 | **AI 없는 1시간**: 핵심 재구현 또는 문제 풀이 | 사용 금지 |
-| 7:00~7:40 | 리뷰·리팩터링 | 리뷰어 모드 |
-| 7:40~8:00 | 학습 노트, 내일 계획 | 출제자 모드로 내일 퀴즈 예약 |
+| 2 | chat server | TCP 9000 |
+| 3 | game servers/tool | TCP 5000/5001, tool 5050 |
+| 4 | API | HTTP 8080; use 8081 when the capstone reserves 8080 |
+| 5 | metrics | HTTP 9101 |
+| 6 | API, matcher, game servers | 8080, 8090, 9001, 9002 |
 
-금요일 오후 4시간은 **주간 점검**(§5.1)에 사용한다.
+Ports and `serverId` must be configurable. Client ephemeral ports are separate and must be checked with `netsh int ipv4 show dynamicport tcp` before connection-flood tests.
 
----
+## 7. ADR Registry
 
-## 3. 전체 로드맵
-
-| Phase | 주차 | 공통 주제 | C# 트랙 | C++ 트랙 | 최종 과제 |
-|---|---|---|---|---|---|
-| 1 | 1~3 | Git, 테스트, 디버깅, Windows 개발 환경, OS·동시성 개념, 벤치마크 방법론 | async/await 내부, GC, Span/ArrayPool, Channel, BenchmarkDotNet | 스마트 포인터·이동·RAII, std::thread/atomic, Win32 동기화(SRWLock/CV), vcpkg/CMake, ASan | 스레드 세이프 로그 큐 + 오브젝트 풀 + 벤치마크 리포트 |
-| 2 | 4~7 | TCP/IP, 패킷 프레이밍, 직렬화, 세션 관리 | Socket/SocketAsyncEventArgs, Pipelines, MemoryPack, (선택) SuperSocketLite | Winsock, select → Overlapped → IOCP, 세션·버퍼 관리 | 다중 접속 채팅 서버 + 패킷 라이브러리 + 테스트 클라이언트 |
-| 3 | 8~11 | 스레드 모델, 룸 액터, 게임 루프, 서버 권위, 설계 문서·ADR | Channel 기반 룸 액터, PeriodicTimer, Serilog, 테스트 분리 | 룸 Job 큐 + 스레드 배정, 타이머, 메모리 풀, spdlog | 멀티 룸 실시간 대전 게임 서버(오목) |
-| 4 | 12~15 | HTTP API 설계, 인증, DB(SQLite 기본/MySQL 선택)·Redis, 트랜잭션, 동시성 방어 | ASP.NET Core, Repository+DI(SQLite 기본, 선택 시 SqlKata/Dapper+MySQL), CloudStructures/StackExchange.Redis | (a) cpp-httplib/Drogon + SQLite(기본)/MySQL Connector(선택) + redis-plus-plus, (b) C# 혼합 | 계정/로비/우편/상점 API 서버 |
-| 5 | 16~20 | 부하 테스트, Prometheus/Grafana, 복원력 패턴(재시도·서킷 브레이커), 장애 주입, 보안 | dotnet-counters/trace, PerfView, GC 튜닝 | VS Profiler/ETW/WPA, ASan, TLS·메모리 모델 활용 최적화 | 더미 클라이언트 툴 + 성능 개선 리포트 + 장애 대응 런북 |
-| 6 | 21~26 | 다중 서버 구성, 매칭 서버, 스케일 아웃, 문서화, 면접 준비 | 트랙 언어로 통합 | 트랙 언어로 통합 | 통합 캡스톤 + 포트폴리오 + 모의 면접 |
-
----
-
-## 4. 교재 지도 (요약)
-
-교재는 `https://github.com/jacking75/programming-books-with-ai` 저장소의 책을 사용한다. 자세한 활용법(장 단위 순서, 읽는 방식, 주의점)은 `07-books-guide.md`에 있다. 아래는 Phase별 핵심 교재만 요약한 것이다.
-
-| Phase | 공통 교재 | C# 트랙 교재 | C++ 트랙 교재 |
-|---|---|---|---|
-| 1 | OpenCode로 시작하는 AI 코딩 에이전트(에이전트 개념), 게임 개발자를 위한 C# 디자인 패턴(3장 Object Pool) | C# Async/Await 완전 정복, C# async/await 라이브러리 만들기(1~6장), ASP.NET Core Web API를 위한 필수 C# 가이드(복습용) | Modern C++로 안전하고 우아한 프로그래밍, 모던 Windows 멀티스레딩(3~5·8장), 최신 Win32 API(1·2·4~6장), C++23 메모리 모델(1~2부) |
-| 2 | 게임 서버 개발 네트워크부터 이해하기, 게임 서버 개발자가 알아야할 네트워크 이론, 네트워크 학습 로드맵(1·2·7장) | 게임 서버 개발을 위한 C# Socket 프로그래밍(1~10장), SuperSocketLite(1~6장), async/await 라이브러리 만들기(7장) | 게임 서버 개발자가 알아야할 TCP/IP Windows 소켓 프로그래밍(1~13장), (선택) Boost.Asio(1~9장) |
-| 3 | 네트워크 학습 로드맵(3~5장), C# 디자인 패턴(7~12장), FPS 게임 매칭 시스템(1·3장), 클라이언트 개발자를 위한 네트워크 지식(4·5장) | C# Socket 프로그래밍(11장 오목), SuperSocketLite(7장 오목), 학습을 위한 C# 네트워크 라이브러리 분석, async/await 라이브러리 만들기(16~18장), ECS 기반 온라인 게임 서버(선택) | TCP/IP Windows 소켓(11·14장), 모던 Windows 멀티스레딩(6·11장), (선택) Boost.Asio(11~14·17장) |
-| 4 | 1주일만에 배우는 MySQL C#(Day 1·2·5), 1주일만에 배우는 Redis(1·2장), API 게임 서버 실습(부록 A~C·F·G), 가챠 확률 구현 가이드(9~12장) | ASP.NET Core Web API 게임 서버 실습(전체), ASP.NET Core Web API로 만드는 게임 서버(5~8·13·16장), MySQL C#(3~7), Redis(3~7), 2D MMORPG(2주차) | (a) 저장소 외 공식 문서, (b) C# 트랙 교재 동일 |
-| 5 | 프로메테우스를 이용한 게임 서버 모니터링(전체), fluentd 로그 수집(1~7·13장), 네트워크 학습 로드맵(5·6장), API 게임 서버 실습(23·24장), C# Socket 프로그래밍(8장) | Async/Await 완전 정복(부록 B), async/await 라이브러리 만들기(19·20장) | 모던 Windows 멀티스레딩(10장), 최신 Win32 API(7·10장), 실전 Thread-Local Storage, C++23 메모리 모델(3부), TCP/IP Windows 소켓(12·13장) |
-| 6 | 네트워크 학습 로드맵(8장), FPS 게임 매칭 시스템(4~7장), 2D MMORPG 게임 서버 개발(참조 아키텍처), (선택) MonoGame 클라이언트, NPC 비헤이버트리, 가챠 | 2D MMORPG 코드, ECS 기반 서버 | (선택) Boost.Asio(17·20장) |
-
----
-
-## 5. 학습 검증 체계
-
-### 5.1 매일·매주
-- 매일 아침 AI 출제 퀴즈 5문제(전날 범위), 점수를 학습 노트에 기록
-- 매일 저녁 학습 노트(배운 것 / 몰랐던 것 / AI가 틀린 것 / 내일 할 것)
-- 매주 금요일 오후 4시간 주간 점검
-  1. AI 없이 재구현: 이번 주 핵심 컴포넌트 하나를 60분 내 재구현
-  2. 설명 시험: AI 면접관에게 이번 주 주제 3개 설명, 채점
-  3. 코드 리뷰: 이번 주 커밋 전체 루브릭 리뷰, 상위 3개 문제 수정
-  4. 주간 회고 작성
-
-### 5.2 Phase 말 평가 공통 틀
-
-| 항목 | 방법 | 통과 |
+| ADR | Decision | Phase/Day |
 |---|---|---|
-| 과제 | 필수 과제 체크리스트 + 성능·정합성 조건 로그 | 전 항목 완료 |
-| 재구현 | 대표 컴포넌트를 AI 없이 제한 시간 내 구현 | 제공 테스트 통과 |
-| 설명 시험 | AI 면접관 30분 심층 질문 | 5점 척도 평균 4.0 이상 |
-| 결함 찾기 | AI 결함 주입 코드 | 5개 중 4개 이상 |
-| 문서 | 설계·README·ADR | 타인이 읽고 실행 가능 |
+| 0001 | serialization | Phase 2 / Day 20 |
+| 0002 | room threading model | Phase 3 / Day 37 |
+| 0003 | cross-room messaging | Phase 3 / Day 39 |
+| 0004 | reconnect authentication | Phase 3 / Day 46 |
+| 0005 | DB abstraction | Phase 4 / Day 57 |
+| 0006 | password hashing | Phase 4 / Day 59 |
+| 0007 | session-token rotation | Phase 4 / Day 61 |
+| 0008 | currency/stock source of truth | Phase 4 / Day 66 |
+| 0009 | result-queue durability | Phase 5 / Day 91 |
+| 0010-0012 | inter-server transport, matching, tickets | Phase 6 / Days 103-107 |
+| 0013 | failure recovery | Phase 6 / Day 112 |
+| 0014 | result durability | Phase 6 / Day 116 |
+| 0015 | capstone scope freeze | Phase 6 / Day 120 |
 
-- 미달 항목이 있으면 다음 Phase로 넘어가되, 다음 Phase 1주차에 보강 시간(주 8h)을 배정한다
-- Phase 3, 5는 미달 시 최대 1주 연장을 허용하고 Phase 6 범위를 조정한다
-- 두 트랙 병행(방식 B) 학습자는 트랙 과제만 두 번 평가하고 공통 과제는 한 번 평가한다
+## 8. Repository Policy
 
-### 5.3 코드 리뷰 루브릭 (AI 리뷰어에게 제공)
-1. 정확성: 요구사항대로 동작하는가, 경계 조건을 처리하는가
-2. 동시성: 공유 상태 보호, 데드락·경쟁 조건 가능성
-3. 리소스: 소켓·버퍼·DB 연결·태스크/스레드의 생성·해제 균형 (C++: 소유권 명확성, UB 여부)
-4. 에러 처리: 예외·연결 끊김·타임아웃 시 서버 생존 여부
-5. 성능: 불필요한 할당·복사·락, 핫패스 인식
-6. 구조: 네트워크/로직/데이터 계층 분리, 테스트 가능성
-7. 가독성: 이름, 크기, 주석의 적절성
-
-### 5.4 설명 시험 채점 척도 (AI 면접관에게 제공)
-- 5: 원리·근거·대안·한계를 정확히 설명하고 꼬리 질문에 흔들리지 않음
-- 4: 원리와 근거를 정확히 설명, 대안이나 한계 중 하나가 약함
-- 3: 개념은 맞으나 "왜"에 대한 근거가 부족하거나 용어 혼동 있음
-- 2: 부분적으로 틀린 설명, 꼬리 질문에 답 못 함
-- 1: 설명 불가 또는 근본적 오해
-
-### 5.5 최종 판정 (26주 말)
-- 캡스톤 데모 + 30분 발표 + 60분 모의 면접
-- 포트폴리오 저장소 5개 이상(README·테스트 포함)
-- 학습 노트 100일 이상, 주간 회고 24개 이상
-
----
-
-## 6. 과정 운영 시 자주 나오는 질문
-
-- **하루 8시간을 못 채우는 날이 생기면?** 그 주 금요일 점검에서 "미이행 항목"을 회고에 적고 다음 주 월요일 오전에 보충한다. 2주 연속 20% 이상 미달이면 해당 Phase를 1주 연장하고 Phase 6 범위를 줄인다.
-- **교재 예제가 빌드되지 않는다.** 정상이다. 교재 자체가 "AI 도움을 받아 고쳐 쓰라"고 안내한다. 고치는 과정이 과제의 일부이며, 고친 diff와 원인을 학습 노트에 남긴다.
-- **C++ 트랙인데 Phase 4가 부담된다.** 혼합 경로(API 서버만 C#)를 택한다. 이 경우 Phase 4 첫 주에 "ASP.NET Core Web API를 위한 필수 C# 가이드"를 통독한다.
-- **Docker 없이 DB/Redis를 어떻게 쓰나?** 개발 중에는 SQLite(파일 기반)를 기본으로 쓰므로 별도 설치가 필요 없다. MySQL을 선택했다면 로컬 1벌만 설치하고, 통합 테스트는 테스트 전용 스키마로 분리한다. Redis(redis-windows)도 로컬 1벌만 쓰고 DB index 또는 키 prefix로 테스트를 분리한다.
+- English documents are the default public entry points; `_kr.md` files are Korean counterparts.
+- Apply content changes to Korean first, then mirror only the diff into English in the same commit.
+- Keep headings, code fences, tables, checkboxes, and cross-links structurally aligned.
+- Use **Lab Catalog**, **Track Labs**, **Learning Items in Detail**, **Textbook Guide**, **Acceptance criteria**, **Expected result**, **Note**, **Common mistake**, **Oral exam**, **Secondary-track reading**, and **Preparing for Phase N+1** consistently in English.
+- Markdown uses LF via `.gitattributes`.

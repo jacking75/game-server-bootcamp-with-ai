@@ -549,9 +549,9 @@ phase3/
   {
       private readonly Channel<IJob> _jobs =
           Channel.CreateBounded<IJob>(new BoundedChannelOptions(1024)
-          { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
+          { FullMode = BoundedChannelFullMode.Wait, SingleReader = true });
 
-      public bool Post(IJob job) => _jobs.Writer.TryWrite(job);   // 실패 시 정책 적용
+      public bool Post(IJob job) => _jobs.Writer.TryWrite(job);   // 가득 차면 false, 호출자가 정책 적용
 
       public async Task RunAsync(CancellationToken ct)            // 룸당 1개 루프
       {
@@ -561,7 +561,7 @@ phase3/
   }
   ```
 - **확인 기준**: 룸 100개 동시 실행, 각 룸의 Job 순서 보장, 룸 로직에 `lock` 0개
-- **노트**: `SingleReader=true`가 주는 이점, Bounded 초과 정책 선택 근거
+- **노트**: `SingleReader=true`가 주는 이점, `Wait+TryWrite`가 포화 시 `false`를 보장하는 이유. `DropWrite+TryWrite`는 드롭돼도 `true`가 될 수 있으므로 이 API 계약에 사용하지 않는다
 
 #### L3-CS-02 Serilog 구조화 로깅 (60분) 🔴
 - **단계**: `Log.Logger = new LoggerConfiguration().Enrich.WithProperty("app","omok").WriteTo.Async(a => a.File("logs/log-.txt", rollingInterval: RollingInterval.Day)).CreateLogger();`
@@ -1070,3 +1070,33 @@ Room.SendTo(otherRoomId, job) // 룸 간 메시지
   ```
 - [ ] 유저 식별자를 닉네임에서 **userId(정수)** 로 다룰 수 있게 준비(Phase 4 인증 연동 대비)
 - [ ] Phase 3 회고: 설계와 구현이 달라진 가장 큰 이유, 액터 원칙을 어긴 유혹의 순간, AI가 틀린 사례 1개
+
+---
+
+## 11. 2026-09-05 보강 사항 (앞 절과 충돌하면 이 절 우선)
+
+### 11.1 필수 아키텍처 규칙
+
+#### L3-C-03b 고정 틱 루프와 드리프트 (60분) 🔴
+- **단계**: monotonic clock, accumulator, catch-up 상한, 초과 카운터를 구현하고 10분 드리프트를 측정한다
+- **확인 기준**: stall 주입 후 spiral 방지, tick 수·드리프트·초과 횟수 표
+
+- 38일차에 fixed timestep·accumulator·catch-up 상한·spiral-of-death 카운터를 가진 고정 틱 루프 60분 실습을 필수로 둔다. 오목 로직은 이벤트 기반이어도 서버 루프의 결정성과 드리프트를 측정한다
+- 룸 A→B 요청은 동기 대기하지 않고 B가 처리 후 A에 continuation Job을 게시한다. 게임 종료→로비 통지를 실제 룸 간 메시지로 구현한다
+- 로그인 응답은 16바이트 `reconnectToken`을 발급한다. `ReconnectReq{name,roomId,reconnectToken}`을 검증하며 타인 닉네임·틀린 토큰을 거부한다. 중복 닉네임은 신규 로그인을 거부하고 재접속 경로와 분리한다
+- 끊김 중 턴 타이머는 정지하고 60초 유예 종료 시 패배 처리한다. 상태 머신에 `Spectating`과 `Lobby→Spectating→Lobby`를 추가한다
+- 5000번대에 `Ping/Pong(clientTs)`와 `Heartbeat/HeartbeatAck`를 정의한다. 타임아웃 판정은 서버의 monotonic clock만 사용하고 RTT p50/p99를 기록한다
+- `turnSeq` 불일치는 stale 요청으로 거부한다. `boardHash`는 보드 225바이트+다음 턴+turnSeq의 FNV-1a 64로 고정한다. 속도 위반은 1초 창당 1회로 세고 누적 3창이면 종료한다
+
+### 11.2 일정·평가 현실화
+
+- 39일차 다이어그램은 2개, 40일차 설계는 핵심 6항목으로 줄인다. 44일차 오후부터 게임 핵심 흐름을 분할하고 43·46·48·55일차 초과 실습은 다음 반일 완충 슬롯로 넘긴다
+- 3-C/3-1/3-2의 계획 시간은 12h/58h/12h로 재산정한다. 3-1·3-C는 70/100 이상이며 구조 항목 만점을 필수 게이트로 둔다
+- 로직 테스트는 전이 10, 불법 5, 매칭 8, 치트 6, 재접속 7, 관전 5로 **41개**를 고정한다. `PlaceResult` enum과 wire `uint16` 매핑표를 `PROTOCOL.md`에 둔다
+- 100룸·300접속 기준은 8코어/16GB 권장이다. 미만이면 50룸으로 축소하고 환경을 보고서에 명시한다. C++ ASan은 UAF 검출에 쓰며 누수는 세션·룸 생성/소멸 카운터로 판정한다
+- 41일차 프로젝트 착수 DoD에 `CLAUDE.md`(T3/T3') 작성·커밋을 추가하고, 매일 AI 없는 1시간은 그날 핵심 룸/타이머/상태 코드를 빈 파일에서 재구현한다
+
+### 11.3 추가 검증
+
+- 세션별 토큰 버킷을 패킷 종류별로 두고, 채팅은 UTF-8 유효성·제어문자·바이트/문자 상한을 검사한다. `replay` 시나리오는 moves+seed를 재생해 boardHash 일치를 확인한다
+- 질문 은행에 fixed timestep, 서버 시계, 룸 간 메시지 교착, 토큰 재접속, 큐 포화 계약을 추가한다. AI가 `DropWrite+TryWrite`, 닉네임만으로 재접속, 룸 간 동기 호출을 제안하면 실패 테스트를 먼저 만든다

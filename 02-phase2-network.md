@@ -85,7 +85,7 @@ phase2/
 
 ---
 
-## 2. Weekly Detailed Plan (by day)
+## 2. Weekly Detailed Plan (Day by Day)
 
 Day numbers continue across the whole program (Phase 1 is days 1-15, Phase 2 is days 16-35).
 
@@ -465,11 +465,11 @@ Day numbers continue across the whole program (Phase 1 is days 1-15, Phase 2 is 
 
 ---
 
-## 3. Exercise Catalog
+## 3. Lab Catalog
 
 Save results under `phase2/labs/<exercise-number>/`. Logs, tables, and screenshots must be kept as files (they're the evidence for the explanation exam and reports).
 
-### 3.1 Common Exercises (L2-C)
+### 3.1 Common Labs (L2-C)
 
 #### L2-C-01 Listener and Connection State Check (30 min) 🔴
 - **Goal**: view the state of a server socket from the OS's perspective
@@ -568,7 +568,7 @@ Save results under `phase2/labs/<exercise-number>/`. Logs, tables, and screensho
 - **Steps**: acquire N connections, then disconnect all simultaneously, repeated 5 times. Record the server's handle count, session count, and unreturned pool count before/after each round
 - **Pass criterion**: counters return to their starting values after 5 rounds
 
-### 3.2 C# Track Exercises (L2-CS)
+### 3.2 C# Track Labs (L2-CS)
 
 #### L2-CS-01 Synchronous Echo Server (90 min) 🔴
 - **Skeleton**
@@ -602,7 +602,7 @@ Save results under `phase2/labs/<exercise-number>/`. Logs, tables, and screensho
 - **Steps**: lay out the receive flow, send flow, and session lifetime of `FreeNetLiteRe` and SuperSocketLite as function call sequences
 - **Pass criterion**: a 4-row comparison table against your own server (threading model / buffer management / session lifetime / backpressure)
 
-### 3.3 C++ Track Exercises (L2-CPP)
+### 3.3 C++ Track Labs (L2-CPP)
 
 #### L2-CPP-01 Winsock Synchronous Echo (90 min) 🔴
 - **Skeleton**: `WSAStartup` → `socket/bind/listen` → `accept` loop → a `std::thread` per connection → `recv/send` loop → `shutdown/closesocket` → `WSACleanup`
@@ -710,7 +710,7 @@ Save results under `phase2/labs/<exercise-number>/`. Logs, tables, and screensho
 
 ---
 
-## 5. Textbook Usage Guide (Phase 2)
+## 5. Textbook Guide (Phase 2)
 
 ### 5.1 Common
 
@@ -738,14 +738,14 @@ Save results under `phase2/labs/<exercise-number>/`. Logs, tables, and screensho
 | Building Online Game Servers with C++ Boost.Asio 🟡 | Ch.1-2, 4-6, 7 | Day 34 | Read this after building IOCP yourself, so you can see what Asio abstracts away. The required path is implementing IOCP directly |
 | Practical WinRT: Networking and Multithreaded Programming (reference) | Ch.17 (protocol design), Ch.19 (framing), Ch.20 (session management) | Reference for days 21-26 | The API (WinRT) isn't used, but the design chapters are API-independent. Use as a checklist for the 2-C spec |
 
-### 5.4 Cross-Track Reading Assignment
+### 5.4 Secondary-Track Reading
 
 - C# main track: TCP/IP Windows Socket Programming chapter 9 (I/O models) → **write 1 page on "how does SAEA operate on top of IOCP"**
 - C++ main track: C# Socket Programming chapter 10 (SAEA) → **write 1 page on "how did .NET wrap IOCP"**
 
 ---
 
-## 6. AI Collaboration Guide (Phase 2-specific)
+## 6. AI Collaboration Guide (Phase 2)
 
 ### 6.1 Prompts
 
@@ -823,12 +823,13 @@ You are a developer on a different team who has to implement a client using only
 | 2 | 2 | `PacketId` | uint16 | Packet type |
 | 4 | 1 | `Version` | uint8 | Protocol version. Reject on mismatch |
 | 5 | 1 | `Flags` | uint8 | bit0 compression, bit1 encryption (unused this Phase) |
-| 6 | 2 | `Reserved` | uint16 | For alignment, fixed at 0 |
+| 6 | 2 | `Reserved` | uint16 | Reserved for checksum/future extension; fixed at 0 for now |
 | 8 | N | `Body` | bytes | Serialized payload |
 
 - Endianness: **fixed little-endian** (x86-oriented, avoids conversion cost) or network byte order — pick one and justify it
-- Maximum packet size: 64KB (close the session immediately if exceeded)
+- Maximum packet size: **65,535 bytes** (the largest uint16 value; close the session immediately if exceeded)
 - Minimum packet size: the header size (8). Error if `TotalLength < 8`
+- Strings use UTF-8 with a `uint16` byte-length prefix. Array counts use `uint16`, with a per-packet upper bound documented explicitly
 
 **Requirement 2 — Packet ID scheme**
 
@@ -884,7 +885,9 @@ any --heartbeat timeout/error/disconnect request--> Closing --> Closed
 **Requirement 5 — Rules**
 - Heartbeat: client sends every 10 seconds; server closes after 30 seconds with no response since the last receipt
 - Version mismatch: send `VersionCheckRes(result=VersionMismatch)` then close immediately
-- Error code table: `0=Success, 1=InvalidPacket, 2=InvalidState, 3=NameDuplicated, 4=RoomFull, 5=RoomNotFound, 6=VersionMismatch, 7=RateLimited, ...`
+- Error code table: `0=Success, 1=InvalidPacket, 2=InvalidState, 3=NameDuplicated, 4=RoomFull, 5=RoomNotFound, 6=VersionMismatch, 7=RateLimited, 8=TargetOffline, 9=ServerFull, ...`
+- `ChatNotify.seq` is a room-local monotonically increasing `uint64`. An offline whisper target returns `TargetOffline`; three accumulated `RateLimited` violations close the session
+- Close the socket only after the `DisconnectNotify` send-completion callback or a 2-second timeout
 
 **Requirement 6 — ADR**: `adr/0001-serialization.md` — choice of serialization method (context, decision, 3 alternatives, reasons for rejection, consequences). Template is T5 in `08-templates.md`
 
@@ -917,6 +920,7 @@ any --heartbeat timeout/error/disconnect request--> Closing --> Closed
 5. **Error handling**: on a corrupted packet (length/ID/state mismatch), log it and close only that session. The server survives
 6. **Graceful shutdown**: on Ctrl+C, ① block new connections ② broadcast `DisconnectNotify` ③ wait for sends to finish (up to 2 seconds) ④ clean up sockets ⑤ join threads. Complete within 5 seconds
 7. **Config file**: port, worker thread count, receive buffer size, max connections, timeouts, log level. C# uses `appsettings.json`, C++ uses TOML/JSON
+8. **Connection limit**: once full, send `ErrorNotify(ServerFull)` and close after send completion. Configure per-IP and per-session packet-rate limits
 
 **Non-Functional Requirements (proven by measurement)**
 
@@ -938,6 +942,7 @@ ChatServer/
 └─ tests/    Logic unit tests + Net integration tests
 ```
 - `Logic` only knows about an interface like `ISessionSender { void Send(int sessionId, ReadOnlySpan<byte>); void Close(int sessionId); }` → substitute a fake in tests
+- IOCP workers/SAEA callbacks may invoke `Logic` concurrently, so protect room/user state with **one global Logic lock**. Serialize and call `Send` outside the lock
 - Use the **1-2 object pool** for receive/send buffers
 - Prevent concurrent sends with a per-session send queue
 
@@ -1055,20 +1060,21 @@ public:
 | 8 | ExactBoundary | exactly the buffer size | Ok |
 | 9 | ZeroLength | TotalLength=0 | BadLength |
 | 10 | LengthLessThanHeader | TotalLength=5 | BadLength |
-| 11 | LengthExceeded | TotalLength=70000 | TooLarge |
+| 11 | ConfiguredLimitExceeded | `maxPacketSize=1024`, TotalLength=2000 | TooLarge |
 | 12 | VersionMismatch | Version=99 | BadVersion |
 | 13 | UndefinedId | Id=9999 | Ok (the parser passes it through; the caller decides) |
-| 14 | MaxSizePacket | exactly 64KB | Ok |
+| 14 | MaxSizePacket | exactly 65,535 bytes | Ok |
 | 15 | Consecutive1000Packets | 1,000 in a row | all Ok, order preserved |
 | 16 | ReuseAfterReset | Reset after an error | parsing resumes normally |
 | 17 | RoundTripChat | serialize→deserialize ChatNotify | fields match |
 | 18 | RoundTripRoomList | includes a variable-length array | fields match |
 | 19 | Utf8String | 200 Korean characters | no corruption, length validated |
 | 20 | ZeroAllocationHappyPath | parse 10,000 packets | (C#) 0 allocations or constant |
+| 21 | RandomFuzz | feed 1 MB of random bytes in 1-100 byte chunks | zero exceptions/crashes; only error codes or `NeedMore` |
 
-**Deliverables**: the library project, 20 tests, a usage example (10 lines), README (usage, buffer-return rules)
+**Deliverables**: the library project, 21 tests, a usage example (10 lines), README (usage, buffer-return rules)
 
-**Grading**: correctness (20 tests) 50 / defensive logic (error codes, caps) 20 / API design (ease of use, allocation) 30
+**Grading**: correctness (21 tests) 50 / defensive logic (error codes, caps) 20 / API design (ease of use, allocation) 30
 
 ### 7.4 Common Assignment 2-3. Test Client (required, 16h, days 31, 33)
 
@@ -1087,6 +1093,9 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 | `--scenario` | `chat` \| `storm` \| `garbage` | chat |
 | `--duration` | steady-state hold time (seconds) | 300 |
 | `--msg-interval` | message interval (ms) | 1000 |
+| `--msg-size` | UTF-8 message payload size (bytes) | 64 |
+| `--graceful-ratio` | ratio of clients that close gracefully | 0.9 |
+| `--seed` | deterministic scenario random seed | 20260905 |
 | `--rooms` | number of rooms to spread across | conn/50 |
 | `--out` | results file path (JSON) | stdout |
 
@@ -1104,6 +1113,8 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 
 **Accuracy Requirement**: a unit test verifying the p99 computation against a known dataset (1-1000) is required
 
+The client must use an asynchronous event loop (`SocketAsyncEventArgs`, IOCP, or equivalent) rather than one blocking thread per connection. The JSON output schema must always include `scenario`, `seed`, `connections`, `messageSize`, `gracefulRatio`, `p50Ms`, `p95Ms`, `p99Ms`, `maxMs`, `disconnects`, and `exceptionsByType`.
+
 **Deliverables**: code, 2 result files from a 500-connection run (chat/storm), usage README
 
 **Grading**: scenarios work 40 / statistics accuracy (including the p99 verification test) 30 / usability (arguments, output, reproducibility) 30
@@ -1116,7 +1127,7 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 
 ---
 
-## 8. Learning Completion Assessment (Friday, Day 35)
+## 8. Learning Completion Assessment (Day 35, Friday)
 
 ### 8.1 Checklist
 
@@ -1142,13 +1153,13 @@ LoadClient --host 127.0.0.1 --port 9000 --conn 500 --rampup 50 \
 ### 8.2 Reimplementation Exam (No AI, 90 minutes)
 
 **Problem**: implement a framing parser from an empty project and pass the 10 provided tests below.
-The header is `[TotalLength:uint16][PacketId:uint16][Version:uint8][Flags:uint8][Reserved:uint16]` = 8 bytes, little-endian, max 64KB.
+The header is `[TotalLength:uint16][PacketId:uint16][Version:uint8][Flags:uint8][Reserved:uint16]` = 8 bytes, little-endian, max 65,535 bytes.
 
 Provided tests: 10 of #1-#12 from the §7.3 test list (1, 2, 3, 5, 6, 7, 9, 10, 11, 12)
 
 **Pass criterion**: pass all 10 within 90 minutes.
 
-### 8.3 Explanation Exam Question Bank (10 questions at random, average 4.0+)
+### 8.3 Oral Exam Question Bank (10 random questions, average 4.0+)
 
 **Common**
 1. What is the server socket's state at each stage of the 3-way handshake? Which stage does SYN flooding attack?
@@ -1213,7 +1224,7 @@ In code with 5 planted defects on the topics of framing, session termination, an
 
 ---
 
-## 10. Preparing to Move on to Phase 3
+## 10. Preparing for Phase 3
 
 - [ ] Organize `PacketLib` (2-2) and `LoadClient` (2-3) into shared projects and tag a version (`v0.2`)
 - [ ] Mark the 5000-range (game) area reserved for Phase 3 in `PROTOCOL.md`
@@ -1221,3 +1232,32 @@ In code with 5 planted defects on the topics of framing, session termination, an
 - [ ] Read ahead through templates T4 (design document) and T5 (ADR) in `08-templates.md`, and create an empty `DESIGN.md` to use in Phase 3
 - [ ] Write a 3-line note (from a thread-ownership perspective) on what needs to change when turning the chat server's "room" code into Phase 3's "room actor"
 - [ ] Phase 2 retrospective: the longest-stuck bug and its cause, one case where AI was wrong, one habit to carry into Phase 3
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Schedule and buffer
+
+- Extend 2-2 across Days 22-24; C++ builds `BinaryReader/Writer` helpers before the 20 packet types. Move `L2-CPP-05` to Day 27 and the `garbage`/large-connection labs to Day 33 morning
+- Split overloaded work on Days 25-26 and reserve Days 31 and 33 morning for 2-3. Keep a half-day weekly buffer. Implementation-slot budgets are 2-C 6h, 2-1 42h, 2-2 18h, 2-3 10h, 2-4 6h
+
+### 11.2 Large-connection and TCP semantics
+
+#### L2-CS-06 Large-Scale SAEA Connection Traps (90 min) 🔴
+- **Steps**: reproduce 1,000 pending pinned 64KB receives and two receives per socket; fix with pooled slices and one receive per socket
+- **Acceptance criteria**: 10055/completion-order logs and a before/after pinned-memory table
+
+#### L2-CPP-07 Large-Scale IOCP Connection Traps (90 min) 🔴
+- **Steps**: reproduce/fix OVERLAPPED lifetime, 10055, zero-byte receives, and one outstanding receive per socket
+- **Acceptance criteria**: 1,000 connections, restored session/buffer counters, completion-order log
+
+- `L2-CS-06/L2-CPP-07 Large-connection traps` (90 min): keep one outstanding receive per socket; observe `WSAENOBUFS(10055)` with 64KB×1,000 pending receives, fix it with small pooled/zero-byte receives, then demonstrate reordered completion from two receives
+- C# covers the pinned object heap, SAEA buffer slices, and `BufferList`; C++ owns buffers through OVERLAPPED completion
+- Add three 30-minute labs covering keep-alive vs app heartbeat, half-close, backlog overflow, `SO_EXCLUSIVEADDRUSE`, socket buffers, and CLOSE_WAIT diagnosis
+- Include TLS/`SslStream`, plaintext risk, IPv6 `DualMode`, protocol evolution, port-0 in-process tests, and injectable clocks
+
+### 11.3 Evaluation and AI checks
+
+- `L2-C-16` passes only when four workers concurrently run 10,000 join/leave operations with consistent room/user counts. Require five-second counter logs and `COMPARE-2-1.md`
+- Add interview/defect topics for IOCP completion order, one outstanding receive, 10055, half-close, TIME_WAIT, Nagle, framing fuzz, and Logic lock scope. Reject claims equating callbacks to threads, `ReceiveAsync=true` to success, TCP to message boundaries, or unlimited pinning

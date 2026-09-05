@@ -12,7 +12,7 @@
 
 ### 1.1 What Kind of Books Are These
 - This is a collection of books created by the author asking AI "what kind of book to make and what content should go into it," then editing the text the AI wrote. The repository README explicitly states, **"There may be errors in the example code, so please get help from AI."**
-- Because they are written in Markdown, **they can be fed directly into an AI's context.** This is the biggest difference from paper books, and the reason this curriculum uses this repository as its textbook source.
+- Markdown makes the books easy to read with AI, but never load a 10,000+ line book wholesale. Add only the designated chapter file to context.
 - Each book differs in completeness, length, and baseline version (.NET 8/9/10, C++20/23/26). This is noted on each book's card (§4).
 - Only some books have an example code folder (TCP/IP sockets, C# Socket, SuperSocketLite, the network library analysis, the two Async books, 2D MMORPG, ECS, the ASP.NET WebAPI game server, Boost.Asio). The rest only have code embedded in the body text.
 
@@ -101,7 +101,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 | An Analysis of C# Network Libraries for Study | | | ○ | | | | C# |
 | Mastering C# Async/Await | ◎ | | ○ | | ○ | | C# |
 | Building a C# async/await Library | ○ | ○ | ◎ | | ○ | △ | C# |
-| C# Design Patterns for Game Developers | ○ | | ◎ | | △ | △ | Common (concepts) |
+| C# Design Patterns for Game Developers | ○ | | ◎ | | ○ | △ | Common (concepts) |
 | Essential C# Guide for ASP.NET Core Web API | ○ | | | ◎ (mixed) | | | C#/Mixed |
 | Building an API Game Server with ASP.NET Core Web API | | | | ◎ | ○ | | C#/Mixed |
 | Building a Game Server with ASP.NET Core Web API | | | | ○ | ○ | | C#/Mixed |
@@ -191,7 +191,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 - When: Phase 1 primary textbook (Ch. 1-4, 6, 7), Phase 3 (Ch. 10), Phase 5 (Ch. 5, Appendix B)
 - What: State machines, SynchronizationContext, ConfigureAwait, the Awaitable pattern, async in servers, 12 pitfalls, async synchronization objects, AsyncLocal, new .NET 10 features, practical patterns, a debugging cheat sheet. About 3,300 lines, densely packed
 - How: Give the checklist at the end of each chapter to an AI interviewer for an oral exam. Build `samples/AsyncAwaitBook.sln` (.NET 10, C# 14). For Chapter 6's 12 pitfalls, **create a project that reproduces and fixes each one** (a Phase 1 assignment item)
-- Note: Based on .NET 10. If the SDK is unavailable, lower `TargetFramework` to `net9.0` and flag any .NET 10-only APIs. The target audience is "1+ year of C# experience," so if your grammar/syntax is shaky, read the Essential C# Guide first
+- Note: The course standard is .NET 10. Install the SDK and pin it with `global.json`. If your syntax is shaky, read the Essential C# Guide first
 
 **Building a C# async/await Library — Learning .NET 10's Async Internals by Implementing Them Yourself** — `CSharp-Async_Await_라이브러리_만들기/README.md`
 - When: Phase 1 (Ch. 1-6), Phase 2 (Ch. 7), Phase 3 primary textbook (Ch. 16-18), Phase 5 (Ch. 14, 19, 20), Phase 6 (Ch. 13, 15)
@@ -232,9 +232,9 @@ Instead of porting the code for me, make a table of what needs to change when po
 - Note: Skip the Docker/WSL2/Memurai section of Chapter 12's Redis exercise — this curriculum uses redis-windows (a native Windows binary). Chapters 15, 19, and 21 are optional
 
 **Building a Game Server with ASP.NET Core Web API** — `ASP_NET_WebAPI로_만드는_게임서버/01~17.md`, Appendix
-- When: Phase 4 supplementary (Ch. 5-8, 13, 16), Phase 5 (Ch. 14, 16, 17)
+- When: Phase 4 supplementary (Ch. 5-8, 13, 16), Phase 5 (Ch. 14, 16)
 - What: Web API basics, .http testing, MySQL/Redis, authentication, characters/inventory/gacha/combat, async/optimization/security/deployment. The appendix covers modularizing content/collection/social/shop APIs. About 48,000 lines — very large
-- How: Since its topics overlap with the hands-on book, use it as supplementary material. Look at the Controllers/Repository/Services structure of `codes/GameAPIServer_Template_01` (net9.0) and write a project-structure ADR. Chapter 17 (Docker, deployment) is out of scope for this curriculum (per the no-CI/no-deployment policy), so skip it
+- How: Use it as supplementary material. Upgrade `codes/GameAPIServer_Template_01` to .NET 10, inspect Controllers/Repository/Services, and write a structure ADR. Skip Chapter 17 (Docker/deployment)
 - Note: Chapter 3 (environment setup) is only 22 lines — practically nonexistent. The appendix is longer than the main text. The README advises "fill in any gaps with AI"
 
 **Building an FPS Game Matching System** — `매칭-FPS_게임_매칭_시스템_만들기/`
@@ -260,7 +260,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 **Modern Win32 API Programming for Game Server Developers** — `게임_서버_개발자를_위한_최신_Win32_API 프로그래밍/` (a space in the folder name)
 - When: Phase 1 primary textbook (Ch. 1, 2, 4-6), Phase 3 (Ch. 2, 4 reread), Phase 5 (Ch. 7, Appendix C)
 - What: Win32 basics, memory management (VirtualAlloc, heaps, memory pools), file I/O (overlapped), processes/threads, advanced synchronization, interlocked/lock-free techniques, performance counters/ETW, system information, security/permissions, service programming (not covered in this curriculum), COM/WinRT. VS 2022, C++20
-- How: Refer to Chapter 2's memory pools for the 1-2 assignment. Use Chapter 7 to expose performance counters (PDH) through your own metrics (Phase 5). Chapter 10 (service programming) doesn't need to be read since this curriculum doesn't cover deployment. It's also good to read Appendix D's VS 2022 tips early on
+- How: Use Chapter 2 for assignment 1-2 and Chapter 7 for PDH metrics. Skip Chapter 10 service programming and compare Appendix D tips against the current IDE
 - Note: Winsock is not covered (sockets are handled by the TCP/IP book). No code folder
 
 **The Complete Guide to the C++23 Memory Model (Memory Order)** — `Cpp-MemoryModel/01~05.md`
@@ -315,7 +315,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 
 **Learn Redis Programming in a Week** — `DB-1주일만에_배우는_Redis_프로그래밍/01~07.md`
 - When: Phase 4 primary textbook (Ch. 1, 2 common, Ch. 3-5, 7 C#), Phase 6 (Ch. 6 Pub/Sub)
-- What: Installation (including a WSL2/Memurai section), internal structure/data types, CloudStructures, sessions/duplicate-login handling, profile/inventory caching, ZSet-based rankings, Pub/Sub, events/pipelining/monitoring. .NET 9, Redis 6+
+- What: Installation, internals/data types, CloudStructures, sessions, caches, ZSet, Pub/Sub, pipelines, and monitoring. Capstone `GETDEL` requires Redis 6.2+; use Lua on older builds
 - How: Skip all of Chapter 1's Docker/WSL2/Memurai sections entirely and replace them with installing redis-windows (https://github.com/redis-windows/redis-windows). Extend Chapter 2's data-structure table into a judgment table of "is this data suited to the DB (SQLite/MySQL) or to Redis." Chapter 6's Pub/Sub is a candidate for inter-server communication in the capstone (note its loss characteristics in an ADR)
 - Note: No code folder
 
@@ -323,6 +323,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 - When: Phase 5 primary textbook (the entire book)
 - What: Monitoring concepts, the Prometheus architecture, **Windows installation** (Prometheus, windows_exporter, Grafana), instrumenting the .NET 9 API/socket server examples, custom exporters, alerting, dashboards, and operational scenarios. About 2,500 lines
 - How: Instrument your own 3-1/4-1 instead of the example server, following the order Ch. 3 → 4 → 6 → 8 → 9 → 10 → 11 → 12. Keep Appendix B (Grafana query examples) handy while working on dashboards. The C++ track should translate the instrumentation code to prometheus-cpp
+- Note: If Chapter 10 assumes Docker/Linux Alertmanager, use the Windows Alertmanager binary or Grafana Alerting plus a local webhook
 - Note: Since this is a short hands-on guide, supplement deeper topics like PromQL and histogram bucket design with official documentation
 
 **Log Collection and Forwarding Using fluentd** — `게임_서버-fluentd를_이용한_로그_수집과_전송/README.md`
@@ -357,7 +358,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 2. (P2) Starting from Networking → Network Theory (+ log/netstat observation) → C# Socket Ch. 1-7, 9, 10 → Building the async Library Ch. 7 → the Roadmap Ch. 1, 2, 7 → FreeNetLite → SuperSocketLite Ch. 1-6
 3. (P3) Building the async Library Ch. 16-18 → Design Patterns Ch. 7-12, 16 → the Roadmap Ch. 3-5 → C# Socket Ch. 11 → SuperSocketLite Ch. 7 → Matching Ch. 1, 3 → Client Networking Ch. 4, 5 → Mastering Async/Await Ch. 10 → Network Library Analysis → (optional) ECS
 4. (P4) the API Game Server Lab Appendices A-C, F, G → MySQL Day 1, 2 → the API Game Server Lab Ch. 1-7 → MySQL Day 3, 4 → the API Game Server Lab Ch. 8-11 → Redis Ch. 1-5 → the API Game Server Lab Ch. 12-14, 16-18, 20, 22 → MySQL Day 5-7 → Gacha Ch. 9-12, 16 → the WebAPI Game Server book Ch. 5-8, 13, 16 → 2D MMORPG, Week 2 (of the book)
-5. (P5) C# Socket Ch. 8, Appendix → Mastering Async/Await Ch. 5, Appendix B → Prometheus (entire book) → fluentd Ch. 1-7, 13 → the API Game Server Lab Ch. 23, 24 → Building the async Library Ch. 14, 19, 20 → the WebAPI Game Server book Ch. 14, 16, 17 → the Roadmap Ch. 5, 6 → Gacha Ch. 15
+5. (P5) C# Socket Ch. 8, Appendix → Mastering Async/Await Ch. 5, Appendix B → Prometheus → fluentd Ch. 1-2 read-through (3-7, 13 reference) → API Lab 23-24 → async Library 14, 19, 20 → WebAPI book 14, 16 → Roadmap 5-6 → Gacha 15
 6. (P6) Matching Ch. 4-7 → 2D MMORPG Ch. 1-4, 8 + code → Redis Ch. 6 → the Roadmap Ch. 8 → Building the async Library Ch. 13, 15 → Design Patterns Ch. 17 → review the 2 network theory books → (optional) MonoGame, Gacha, ECS, P2P Ch. 1-2
 
 ### 5.2 C++ Track
@@ -365,7 +366,7 @@ Instead of porting the code for me, make a table of what needs to change when po
 2. (P2) Starting from Networking → Network Theory (+ log/netstat observation) → TCP/IP Windows Sockets Ch. 1-6, 8-11, 13 + codes → the Roadmap Ch. 1, 2, 7 → Modern Windows Multithreading Ch. 6 → (reference) WinRT Ch. 17, 19, 20 → (optional) Boost.Asio Ch. 1, 2, 4-7
 3. (P3) Modern Windows Multithreading Ch. 6, 11, 12 → TCP/IP Sockets Ch. 11, 14 → Design Patterns Ch. 7-12, 16 (concepts) → the Roadmap Ch. 3-5 → Win32 API Ch. 2, 4 → Matching Ch. 1, 3 → Client Networking Ch. 4, 5 → (optional) Boost.Asio Ch. 11-14, 17; ECS
 4. (P4) Path (a): MySQL Day 1, 2, 5 (SQL) → Redis Ch. 1, 2 → the API Game Server Lab Appendices A-C, F, G → Gacha Ch. 9-12, 16 + official documentation (cpp-httplib, MySQL Connector/C++, redis-plus-plus). Path (b): the entire Essential C# Guide → follow the C# track's P4 order
-5. (P5) Modern C++ (Safe and Elegant) Ch. 18, 14 → Modern Windows Multithreading Ch. 10, Appendices B, C → Win32 API Ch. 7, 10, Appendix C → Prometheus (entire book, instrumenting with prometheus-cpp) → fluentd Ch. 1-7, 13 → TLS Ch. 4-6 → Memory Model Parts 3-4 → TCP/IP Sockets Ch. 12, 13, 14 → the Roadmap Ch. 5, 6
+5. (P5) Modern C++ 18, 14 → Windows Multithreading 10, B, C → Win32 API 7, C → Prometheus with prometheus-cpp → fluentd 1-2 read-through (3-7, 13 reference) → TLS 4-6 → Memory Model 3-4 → TCP/IP 12-14 → Roadmap 5-6
 6. (P6) Matching Ch. 4-7 (architecture) → 2D MMORPG (as a reference structure) → Redis Ch. 6 → the Roadmap Ch. 8 → Modern C++ (Safe and Elegant) Ch. 17 → Modern Windows Multithreading Ch. 11 reread → (optional) Boost.Asio Ch. 17, 20, 21; Modern C++ Programming as Safe as Rust Ch. 1, 16 → review the 2 network theory books
 
 ---
@@ -383,3 +384,16 @@ Instead of porting the code for me, make a table of what needs to change when po
 - Clone the repository locally, and connect it as a `books/` submodule or symbolic link in the curriculum repository so Claude Code can read the needed chapters directly
 - Create a `NOTES.md` in each book's folder and accumulate "chapters read / examples built / errors fixed / differences from official documentation." This serves as evidence of "where AI (the book) got it wrong" for the end-of-Phase evaluation
 - Since the repository is updated over time (most recently added, as of 2026-08: 2D MMORPG), run `git pull` at the start of each Phase and update the book cards if any books have changed
+
+### Per-Phase Reading Budget and Modes
+
+| Phase | Read-through | Code Analysis | Reference | Estimated Time |
+|---|---|---|---|---|
+| 1 | designated core chapters | async/Windows examples | syntax supplements | 34h |
+| 2 | designated networking chapters | Socket/IOCP code | library comparison | 42h |
+| 3 | actor/state/game loop | Omok examples | ECS/matching | 36h |
+| 4 | API/DB/Redis core | API structure | MySQL/gacha | 38h |
+| 5 | Prometheus, fluentd 1-2 | profiler examples | remaining ops chapters | **46h max** |
+| 6 | matching core | 2D MMORPG structure | optional content | 32h |
+
+Read-through covers text and checklists; code analysis includes build/run/diagram comparison; reference mode opens only the blocked section.

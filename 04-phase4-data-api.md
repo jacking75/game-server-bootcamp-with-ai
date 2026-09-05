@@ -81,7 +81,7 @@ phase4/
 │  ├─ Data.MySql/               MySQL implementation 🟡 ← optional
 │  ├─ Cache/                   Redis access (sessions, rankings)
 │  ├─ Api/                     HTTP entry point, middleware, auth
-│  ├─ Worker/                  batch jobs (mail expiry, attendance reset)
+│  ├─ Worker/                  batch jobs (mail expiry, ledger/stock consistency)
 │  └─ tests/                   30+ integration / 3 concurrency / 5 auth
 ├─ migrations/                 schema version scripts
 ├─ tools/seed-data.ps1         dummy data generation
@@ -375,7 +375,7 @@ Day numbers are based on the whole course (Phase 4 spans days 56-75).
 #### Day 70 (Fri) — Batch Worker + Weekly Checkpoint
 
 **Morning (3h)**
-- `L4-C-26` Batch worker: clean up expired mail (delete/archive past the expiry date), attendance reset (midnight), 🟡 season-end snapshot
+- `L4-C-26` Batch worker: clean expired mail, verify ledger sum=balance and stock consistency, 🟡 season-end snapshot
 - Scheduling: a separate console app + timer (without depending on the OS scheduler), preventing duplicate runs (locking)
 
 **Afternoon (4h) — Weekly Checkpoint**
@@ -439,7 +439,7 @@ Day numbers are based on the whole course (Phase 4 spans days 56-75).
 - Write down 3 optimizations you must not make just to lower p99
 
 **DoD**
-- [ ] Login p99 at or below 100ms (or, if not met, root-cause analysis)
+- [ ] For 100 total/concurrency 10, login p99 ≤ measured single-hash×2+30ms; `/user/data` concurrency 100 p99 ≤ 50ms
 - [ ] `PERF-4-1.md` complete (execution plan before/after + p99)
 
 #### Day 74 (Thu) — Consolidating Integration Tests and 🟡 Deep Dives
@@ -621,7 +621,7 @@ Day numbers are based on the whole course (Phase 4 spans days 56-75).
   builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
   builder.Services.AddScoped<IUserRepository, UserRepository>();
   ```
-  Add `Cache=Shared` to the connection string, and at startup run `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;`
+  Do not use shared-cache mode. At startup run `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;`, and have the factory create a connection per request/thread
 - **Acceptance criteria**: integration tests pass against a real SQLite file (or a temp file)
 - **Note**: the problems that arise if `IDbConnection` lifetime is Scoped, and how the factory pattern solves them
 
@@ -666,7 +666,7 @@ Day numbers are based on the whole course (Phase 4 spans days 56-75).
 
 ---
 
-## 4. Detailed Learning Items
+## 4. Learning Items in Detail
 
 ### 4.1 Common (100h)
 
@@ -747,7 +747,7 @@ Day numbers are based on the whole course (Phase 4 spans days 56-75).
 
 ---
 
-## 5. Book Usage Guide (Phase 4)
+## 5. Textbook Guide (Phase 4)
 
 ### 5.1 Common
 
@@ -778,14 +778,14 @@ The repository has no C++ API server book. Use official documentation instead.
 - redis-plus-plus README
 - Read the SQL/data-structure portions of the common books the same way, and treat "how would this be done with C++ libraries" as the translation exercise for the C# code portions
 
-### 5.4 Supplementary Track Reading Assignment
+### 5.4 Secondary-Track Reading
 
 - C# main track: Gacha guide Ch.11-12 → summarize "3 patterns of currency deduction atomicity" (already a common assignment)
 - C++ main track (path a): API Game Server Lab Ch.8 (custom token design) → a 1-page comparison against your own C++ token implementation
 
 ---
 
-## 6. AI Collaboration Guide (Phase 4 Specific)
+## 6. AI Collaboration Guide (Phase 4)
 
 ### 6.1 Prompts
 
@@ -861,7 +861,7 @@ Flag any place where the interface leaks details specific to a particular DB.
 
 | Table | Key columns | Notes |
 |---|---|---|
-| `account` | account_id(PK), login_id(UNIQUE), password_hash, salt, created_at, last_login_at | authentication only |
+| `account` | account_id(PK), login_id(UNIQUE), password_hash, created_at, last_login_at | authentication only; salt is encoded in the hash string |
 | `user` | user_id(PK), account_id(FK,UNIQUE), nickname(UNIQUE), level, exp, created_at | game profile |
 | `user_currency` | user_id(PK), gold, gem, updated_at | currency ledger |
 | `item_master` | item_id(PK), name, type, stackable, max_stack | master data |
@@ -871,8 +871,10 @@ Flag any place where the interface leaks details specific to a particular DB.
 | `attendance` | user_id(PK), last_check_date, streak_count | once per day |
 | `shop_product` | product_id(PK), item_id, price_currency, price_amount, stock, is_active | stock nullable |
 | `purchase_log` | purchase_id(PK), user_id, product_id, price_amount, gold_before, gold_after, created_at | audit trail |
+| `currency_ledger` | ledger_id(PK), user_id, delta, reason, ref_id, balance_after, created_at | ledger for every currency mutation |
 | `game_result` | game_id(PK, externally generated), room_id, winner_user_id, loser_user_id, reason, played_at | idempotency key |
-| `idempotency_key` | key(PK), user_id, endpoint, response_json, created_at | subject to TTL cleanup |
+| `idempotency_key` | key(PK), user_id, endpoint, status, request_hash, response_json, created_at | subject to TTL cleanup |
+| `notice` | notice_id(PK), title, body, starts_at, ends_at | notice lookup |
 
 3. **Index list**: a "this is for this query" comment on each index
 4. **DB vs Redis Placement Decision Table**
@@ -885,7 +887,7 @@ Flag any place where the interface leaks details specific to a particular DB.
 | Mailbox | DB | needs persistence |
 | Attendance record | DB | persistence, audit |
 | Online user list | Redis | volatile |
-| Shop stock | DB(ledger) + Redis(Lua deduction) | consistency + performance |
+| Shop stock | DB conditional UPDATE | single source of truth; Redis Lua is only an atomicity demo and requires compensating INCR plus batch mismatch detection on DB failure |
 | Idempotency key | Redis(TTL) or DB | convenient expiry management |
 
 **Deliverable 2 — `API.md`** (20 or more endpoints)
@@ -953,11 +955,11 @@ For each endpoint, write the **request schema / response schema / possible error
 3. **User data load**: basic info, currency, inventory summary, unread mail count in one call
 4. **Inventory**: list (paginated), use (deduct quantity, delete if it reaches 0)
 5. **Mailbox**: list, claim (grant attachments, only once), expiry (batch)
-6. **Attendance**: once per day, reset at midnight (KST), consecutive attendance count
+6. **Attendance**: once per KST calendar day, consecutive attendance count; no separate midnight reset job
 7. **Shop**: product list, purchase (currency deduction + item grant + history, **a single transaction**), one stocked product
 8. **Ranking**: update score from game results (ZSET), top 100, my rank and nearby
 9. **Internal API**: save game results (idempotent on gameId), token verification. Server-to-server authentication required
-10. **Batch worker**: mail expiry cleanup, attendance reset, duplicate-run prevention
+10. **Batch worker**: mail expiry cleanup, currency-ledger and stock consistency checks, duplicate-run prevention
 
 **Repository Interface Skeleton**
 
@@ -995,7 +997,8 @@ public interface IMailRepository
 |---|---|---|
 | 100 concurrent shop purchases | currency deducted exactly once, exactly 1 item granted | same |
 | 50 concurrent mail claims/attendance checks | processed exactly once | same |
-| Login p99 | under 100ms with 10,000 users loaded | under 100ms with 1,000,000 users loaded |
+| Login hash path | 100 total requests, concurrency 10; p99 ≤ measured single-hash cost×2+30ms | same |
+| `GET /user/data` | concurrency 100, p99 ≤ 50ms | same |
 | Execution plan | at 10,000/100,000 scale, zero full scans on the 5 key queries | at 1,000,000/10,000,000 scale, same |
 | SQL | 100% parameter binding (zero string concatenation) | same |
 | Logging | request ID, userId, elapsed time, result code, tokens/passwords masked | same |
@@ -1013,10 +1016,11 @@ public interface IMailRepository
 ## 1. Environment (DB type/version, data scale, hardware)
 ## 2. Execution plan before/after for the 5 key queries
 | Query | Before (scan type/time) | Index | After (scan type/time) |
-## 3. Login API p99 (100 concurrent)
-| Attempt | p50 | p95 | p99 | Failure rate |
-## 4. Bottlenecks and fixes (hashing cost is not lowered — explain why)
-## 5. Remaining limitations
+## 3. Hash-cost measurement and login API p99 (100 total, concurrency 10)
+| Hash Parameters | Single Hash | Login p50 | p95 | p99 | Failure Rate |
+## 4. /user/data p99 (concurrency 100, target 50ms)
+## 5. Bottlenecks and fixes (hashing cost is not lowered — explain why)
+## 6. Remaining limitations
 ```
 
 **Grading**
@@ -1061,7 +1065,7 @@ public interface IMailRepository
 
 ---
 
-## 8. Learning Completion Assessment (Friday, Day 75)
+## 8. Learning Completion Assessment (Day 75, Friday)
 
 ### 8.1 Checklist
 
@@ -1152,7 +1156,7 @@ Missing transaction / N+1 / unused index / missing token verification / race —
 
 ---
 
-## 10. Preparing Before Moving to Phase 5
+## 10. Preparing for Phase 5
 
 - [ ] Download the Windows binaries for Prometheus, Grafana, and windows_exporter (installation happens in Phase 5, week 17)
 - [ ] Check whether the log fields in 3-1/4-1 are standardized (these become the input to Phase 5 observability): `requestId/sessionId/userId/roomId/gameId/durationMs/resultCode`
@@ -1160,3 +1164,36 @@ Missing transaction / N+1 / unused index / missing token verification / race —
 - [ ] Prepare to add **API call scenarios** to the load tool (the 2-3/3-2 client) (login → game → check ranking)
 - [ ] Record a performance baseline: current login p99, purchase p99, game-result save p99 — these become improvement targets in Phase 5
 - [ ] Phase 4 retrospective: the hardest consistency problem, one risky piece of code AI suggested, a moment where DB abstraction actually helped
+
+---
+
+## 11. 2026-09-05 Revisions (this section wins on conflicts)
+
+### 11.1 Implementation contract
+
+- Default password hashing is built-in `Rfc2898DeriveBytes.Pbkdf2`; encode algorithm, iterations, and salt in one PHC-style string. The single C# alternative is `BCrypt.Net-Next`; C++ uses libsodium
+- C++ SQLite uses per-request/thread-local connections or a pool. Sharing one connection requires `SQLITE_OPEN_FULLMUTEX` plus external serialization. Use Dapper/prepared statements consistently
+- Inject `TimeProvider`/`IClock`; store UTC and apply KST only for attendance decisions. `mail.status` is `Unread/Received/Expired`. Tokens have 24h absolute and 1h sliding expiry; refresh rotates and immediately revokes the old token
+- Update `session:{token}` and `user_session:{userId}` atomically with Lua/MULTI. Idempotency inserts a new key, returns 409 while processing, replays completed responses, and returns 422 for the same key with a different request hash
+- Record every currency mutation in `currency_ledger` in the balance transaction. A batch verifies ledger sum=balance and Redis/DB stock consistency
+- Game-server HTTP runs outside room Jobs through a durable outbox and sender thread; document capacity, timeout, retry, and discard policy in an ADR
+
+### 11.2 Schedule, exams, migrations
+
+#### L4-C-20a Idempotency Filter (90 min) 🔴
+- **Steps**: insert key → return 409 while processing → store/replay response → return 422 for request-hash mismatch
+- **Acceptance criteria**: 50 identical requests mutate once; modified reuse is rejected
+
+#### L4-C-24b Game-Server Token Verification Handoff (60 min) 🔴
+- **Steps**: verify `LoginReq{token}` through the internal API, bind userId to session, reject expired/forged tokens
+- **Acceptance criteria**: remove nickname login path; pass success/expiry/forgery integration tests
+
+- Make Day 58 afternoon a test-infrastructure day for `L4-CS-03/04` or `L4-CPP-03/04`, DB isolation, `IClock`, and `CLAUDE.md`. Add `L4-C-20a Idempotency filter` (90 min) on Day 67 and `L4-C-24b Token handoff` (60 min) on Day 69
+- Add nickname optimistic locking on Day 64, `schema_version` plus `002_add_season.sql` on Day 68, and ledger-sum verification on Day 70. Move optional MySQL migration to Phase 5 buffer time
+- Rebudget 4-C/4-1/4-2 as 12h/62h/10h. Provide an exam skeleton and 120 minutes; request-body `userId` is test scaffolding only, while production trusts authentication context
+- Enumerate the 30 integration tests as account6/inventory5/mail5/attendance4/shop5/ranking3/internal3. Full 25 consistency/idempotency points are a passing gate
+
+### 11.3 Attack, performance, and AI checks
+
+- The replay attack omits the idempotency key or reuses a key with a modified body. Day 73 uses the 3-2 HTTP scenario or a parallel `HttpClient` script
+- Add questions on in-flight idempotency, ledgers, optimistic locking, UTC/KST, token rotation, and outbox. Reject SQLite shared cache, Redis-first dual writes, or request-body userId with concurrency/failure-injection tests

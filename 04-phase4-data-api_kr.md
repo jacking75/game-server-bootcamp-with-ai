@@ -79,7 +79,7 @@ phase4/
 │  ├─ Data.MySql/              MySQL 구현체 🟡      ← 선택
 │  ├─ Cache/                   Redis 접근(세션·랭킹)
 │  ├─ Api/                     HTTP 진입점, 미들웨어, 인증
-│  ├─ Worker/                  배치(우편 만료·출석 리셋)
+│  ├─ Worker/                  배치(우편 만료·원장/재고 정합 검사)
 │  └─ tests/                   통합 30+ / 동시성 3 / 인증 5
 ├─ migrations/                 스키마 버전 스크립트
 ├─ tools/seed-data.ps1         더미 데이터 생성
@@ -373,7 +373,7 @@ phase4/
 #### 70일차 (금) — 배치 워커 + 주간 점검
 
 **오전 (3h)**
-- `L4-C-26` 배치 워커: 우편 만료 정리(만료일 지난 것 삭제/보관), 출석 리셋(자정), 시즌 종료 스냅샷
+- `L4-C-26` 배치 워커: 우편 만료 정리, 원장 합=잔액·재고 불일치 검사, 시즌 종료 스냅샷
 - 스케줄링: 별도 콘솔 앱 + 타이머(운영체제 스케줄러 의존 없이), 중복 실행 방지(락)
 
 **오후 (4h) — 주간 점검**
@@ -437,7 +437,7 @@ phase4/
 - "p99를 낮추기 위해 하면 안 되는 최적화" 3가지를 적는다
 
 **DoD**
-- [ ] 로그인 p99 100ms 이하(또는 미달 시 원인 분석)
+- [ ] 총 100·동시 10 로그인 p99 ≤ 해시 1회 실측×2+30ms, `/user/data` 동시 100 p99 ≤ 50ms
 - [ ] `PERF-4-1.md` 완성(실행 계획 전/후 + p99)
 
 #### 74일차 (목) — 통합 테스트 정리와 🟡 심화
@@ -588,7 +588,7 @@ phase4/
 - **확인 기준**: 게임 서버 로그 → API 로그 → DB/Redis 결과가 한 줄로 연결됨
 
 #### L4-C-26 배치 워커 (75분)
-- **단계**: 우편 만료 정리, 출석 리셋, 🟡 시즌 스냅샷. 중복 실행 방지(Redis 락 또는 DB 플래그)
+- **단계**: 우편 만료 정리, 원장 합=잔액·재고 불일치 검사, 🟡 시즌 스냅샷. 중복 실행 방지(Redis 락 또는 DB 플래그)
 - **확인 기준**: 두 인스턴스를 동시에 띄워도 작업이 1회만 수행됨
 
 #### L4-C-27 악용 시나리오 도출 (90분) 🔴
@@ -619,7 +619,7 @@ phase4/
   builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
   builder.Services.AddScoped<IUserRepository, UserRepository>();
   ```
-  연결 문자열에 `Cache=Shared`, 시작 시 `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;`
+  연결 문자열은 공유 캐시를 사용하지 않는다. 시작 시 `PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;`을 적용하고 요청/스레드별 연결을 팩토리에서 생성한다
 - **확인 기준**: 통합 테스트가 실제 SQLite 파일(또는 임시 파일)로 통과
 - **노트**: `IDbConnection` 수명을 Scoped로 두면 생기는 문제와 팩토리 패턴이 푸는 문제
 
@@ -859,7 +859,7 @@ SQLite(쓰기 직렬화)와 MySQL(REPEATABLE READ)에서 결과가 달라지는 
 
 | 테이블 | 핵심 컬럼 | 비고 |
 |---|---|---|
-| `account` | account_id(PK), login_id(UNIQUE), password_hash, salt, created_at, last_login_at | 인증 전용 |
+| `account` | account_id(PK), login_id(UNIQUE), password_hash, created_at, last_login_at | 인증 전용. 솔트는 해시 문자열에 포함 |
 | `user` | user_id(PK), account_id(FK,UNIQUE), nickname(UNIQUE), level, exp, created_at | 게임 프로필 |
 | `user_currency` | user_id(PK), gold, gem, updated_at | 재화 원장 |
 | `item_master` | item_id(PK), name, type, stackable, max_stack | 마스터 데이터 |
@@ -869,8 +869,10 @@ SQLite(쓰기 직렬화)와 MySQL(REPEATABLE READ)에서 결과가 달라지는 
 | `attendance` | user_id(PK), last_check_date, streak_count | 일 1회 |
 | `shop_product` | product_id(PK), item_id, price_currency, price_amount, stock, is_active | 재고 nullable |
 | `purchase_log` | purchase_id(PK), user_id, product_id, price_amount, gold_before, gold_after, created_at | 감사 추적 |
+| `currency_ledger` | ledger_id(PK), user_id, delta, reason, ref_id, balance_after, created_at | 모든 재화 변동 원장 |
 | `game_result` | game_id(PK, 외부 생성), room_id, winner_user_id, loser_user_id, reason, played_at | 멱등성 키 |
-| `idempotency_key` | key(PK), user_id, endpoint, response_json, created_at | TTL 정리 대상 |
+| `idempotency_key` | key(PK), user_id, endpoint, status, request_hash, response_json, created_at | TTL 정리 대상 |
+| `notice` | notice_id(PK), title, body, starts_at, ends_at | 공지 조회 |
 
 3. **인덱스 목록**: 각 인덱스에 "이 쿼리를 위한 것" 주석
 4. **DB vs Redis 배치 판정표**
@@ -883,7 +885,7 @@ SQLite(쓰기 직렬화)와 MySQL(REPEATABLE READ)에서 결과가 달라지는 
 | 우편함 | DB | 영속성 필요 |
 | 출석 기록 | DB | 영속성·감사 |
 | 온라인 유저 목록 | Redis | 휘발성 |
-| 상점 재고 | DB(원장) + Redis(Lua 차감) | 정합성 + 성능 |
+| 상점 재고 | DB 조건부 UPDATE | 단일 진실 원장. Redis Lua는 원자성 데모에만 사용하며 DB 실패 시 보상 INCR·배치 불일치 검출 필요 |
 | 멱등성 키 | Redis(TTL) 또는 DB | 만료 관리 편의 |
 
 **산출물 2 — `API.md`** (엔드포인트 20개 이상)
@@ -951,11 +953,11 @@ SQLite(쓰기 직렬화)와 MySQL(REPEATABLE READ)에서 결과가 달라지는 
 3. **유저 데이터 로드**: 1회 호출로 기본 정보·재화·인벤토리 요약·미수령 우편 수
 4. **인벤토리**: 조회(페이징), 사용(수량 차감, 0이면 삭제)
 5. **우편함**: 목록, 수령(첨부 지급, 1회만), 만료(배치)
-6. **출석**: 일 1회, 자정(KST) 리셋, 연속 출석 카운트
+6. **출석**: KST 날짜 기준 일 1회, 연속 출석 카운트. 별도 자정 리셋 작업은 두지 않는다
 7. **상점**: 상품 목록, 구매(재화 차감 + 아이템 지급 + 이력, **하나의 트랜잭션**), 재고 상품 1종
 8. **랭킹**: 게임 결과로 점수 갱신(ZSET), 상위 100, 내 순위·주변
 9. **내부 API**: 게임 결과 저장(gameId 멱등), 토큰 검증. 서버 간 인증 필수
-10. **배치 워커**: 우편 만료 정리, 출석 리셋, 중복 실행 방지
+10. **배치 워커**: 우편 만료 정리, 재화 원장·재고 정합 검사, 중복 실행 방지
 
 **Repository 인터페이스 골격**
 
@@ -993,7 +995,8 @@ public interface IMailRepository
 |---|---|---|
 | 동시 100회 상점 구매 | 재화 1회분만 차감, 아이템 1개만 지급 | 동일 |
 | 우편 수령·출석 동시 50회 | 1회만 처리 | 동일 |
-| 로그인 p99 | 1만 유저 상태에서 100ms 이하 | 100만 유저 상태에서 100ms 이하 |
+| 로그인 해시 경로 | 총 100요청·동시 10, p99 ≤ 해시 1회 실측×2+30ms | 동일 |
+| `GET /user/data` | 동시 100, p99 50ms 이하 | 동일 |
 | 실행 계획 | 1만/10만 규모, 핵심 쿼리 5개 풀 스캔 0 | 100만/1,000만 규모, 동일 |
 | SQL | 파라미터 바인딩 100%(문자열 결합 0) | 동일 |
 | 로그 | 요청ID·userId·소요 시간·결과 코드, 토큰·비밀번호 마스킹 | 동일 |
@@ -1011,10 +1014,11 @@ public interface IMailRepository
 ## 1. 환경(DB 종류·버전, 데이터 규모, 하드웨어)
 ## 2. 핵심 쿼리 5개 실행 계획 전/후
 | 쿼리 | 전(스캔 종류/시간) | 인덱스 | 후(스캔 종류/시간) |
-## 3. 로그인 API p99 (동시 100)
-| 시도 | p50 | p95 | p99 | 실패율 |
-## 4. 병목과 조치 (해싱 비용은 낮추지 않는다 — 이유 명시)
-## 5. 남은 한계
+## 3. 해시 비용 실측과 로그인 API p99 (총 100·동시 10)
+| 해시 파라미터 | 해시 1회 | 로그인 p50 | p95 | p99 | 실패율 |
+## 4. /user/data p99 (동시 100, 목표 50ms)
+## 5. 병목과 조치 (해싱 비용은 낮추지 않는다 — 이유 명시)
+## 6. 남은 한계
 ```
 
 **채점**
@@ -1158,3 +1162,36 @@ public interface IMailRepository
 - [ ] 부하 도구(2-3/3-2 클라이언트)에 **API 호출 시나리오**를 넣을 준비(로그인 → 게임 → 랭킹 조회)
 - [ ] 성능 기준선 기록: 현재 로그인 p99, 구매 p99, 게임 결과 저장 p99 — Phase 5에서 개선 대상이 된다
 - [ ] Phase 4 회고: 가장 어려웠던 정합성 문제, AI가 제안한 위험한 코드 1개, DB 추상화가 실제로 도움이 된 순간
+
+---
+
+## 11. 2026-09-05 보강 사항 (앞 절과 충돌하면 이 절 우선)
+
+### 11.1 구현 계약
+
+- 비밀번호 해시는 내장 `Rfc2898DeriveBytes.Pbkdf2`를 기본으로 하고 알고리즘·반복·salt를 PHC형 단일 문자열에 저장한다. 대안은 `BCrypt.Net-Next` 하나로 고정한다. C++은 libsodium을 사용한다
+- C++ SQLite는 요청 스레드별/thread-local 연결 또는 풀을 사용한다. 단일 연결 공유 시 `SQLITE_OPEN_FULLMUTEX`와 외부 직렬화를 명시한다. 공통 SQL 접근은 Dapper/준비된 문장으로 통일한다
+- `TimeProvider`/`IClock`을 주입하고 저장은 UTC, 출석 판정만 KST 날짜로 한다. `mail.status`는 `Unread/Received/Expired`, 토큰은 절대 만료 24h·슬라이딩 1h이며 refresh 시 회전하고 구 토큰을 즉시 폐기한다
+- `session:{token}`과 `user_session:{userId}` 갱신은 Lua/MULTI로 묶는다. 멱등 필터는 신규 키 삽입, 처리 중 409, 완료 응답 재생, 같은 키·다른 request hash 422를 구현한다
+- 모든 재화 변동은 `currency_ledger`와 잔액을 같은 트랜잭션에 기록한다. 배치가 원장 합=잔액과 Redis/DB 재고 불일치를 검사한다
+- 게임 서버 HTTP 호출은 룸 Job 밖의 영속 아웃박스 큐·전용 송신 스레드에서 수행하며 최대 보관 수·타임아웃·재시도/폐기 정책을 ADR로 남긴다
+
+### 11.2 일정·시험·마이그레이션
+
+#### L4-C-20a 멱등성 필터 (90분) 🔴
+- **단계**: key 삽입→처리 중 409→완료 응답 저장/재생→request hash 불일치 422를 구현한다
+- **확인 기준**: 동일 요청 50회가 1회만 반영되고 변조 재사용은 거부된다
+
+#### L4-C-24b 게임 서버 토큰 검증 핸드오프 (60분) 🔴
+- **단계**: `LoginReq{token}`을 내부 verify API로 확인해 userId를 세션에 바인딩하고 만료·위조 토큰을 거부한다
+- **확인 기준**: Phase 3 닉네임 로그인 경로 제거, 성공/만료/위조 통합 테스트
+
+- 58일차 오후를 테스트 인프라 데이로 두어 `L4-CS-03/04` 또는 `L4-CPP-03/04`, 테스트 DB 격리, `IClock`, `CLAUDE.md`를 완료한다. 67일차에 `L4-C-20a 멱등성 필터` 90분, 69일차에 `L4-C-24b 토큰 검증 핸드오프` 60분을 수행한다
+- 64일차에 nickname `version` 낙관적 락, 68일차에 `schema_version`과 `002_add_season.sql`, 70일차에 원장 합 검사를 추가한다. 4-3c MySQL 전환은 Phase 5 완충 시간으로 이동한다
+- 4-C/4-1/4-2 계획 시간은 12h/62h/10h다. 재구현 시험은 골격을 제공하고 120분으로 하며 요청 본문 `userId`는 테스트 편의용이고 실제 구현은 인증 컨텍스트만 신뢰한다
+- 통합 테스트 30개를 계정6/인벤토리5/우편5/출석4/상점5/랭킹3/내부API3으로 명시하고, 정합성·멱등성 25점 만점을 통과 게이트로 둔다
+
+### 11.3 공격·성능·AI 검증
+
+- 4-2 replay는 키 없이 재전송하거나 같은 키로 바디를 변조한다. 73일차 부하는 3-2 클라이언트 HTTP 시나리오 또는 `HttpClient` 병렬 스크립트로 실행한다
+- 질문 은행에 처리 중 멱등 재시도, 원장, 낙관적 락, UTC/KST, 토큰 회전, 아웃박스를 추가한다. AI가 SQLite 공유 캐시, DB+Redis 선차감 이중 쓰기, 본문 userId 신뢰를 제안하면 동시성·실패 주입 테스트로 반박한다
